@@ -259,11 +259,15 @@ async function mcpServerPrincipal(req: IncomingMessage): Promise<RbacPrincipal> 
 
 type McpServerVerb = Extract<
   PermissionVerb,
-  "mcp-server.create.swarm" | "mcp-server.update.any" | "mcp-server.stdio.write"
+  | "mcp-server.create.swarm"
+  | "mcp-server.update.any"
+  | "mcp-server.stdio.write"
+  | "mcp-server.install.any"
+  | "mcp-server.uninstall.any"
 >;
 
 /** The refusal text when the caller may not do this, or null when they may. */
-async function mcpServerPermissionRefusal(
+export async function mcpServerPermissionRefusal(
   req: IncomingMessage,
   verb: McpServerVerb,
   resource: RbacResource,

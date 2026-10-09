@@ -7,6 +7,35 @@ import { registerVolatileSecret } from "@/utils/secret-scrubber";
 
 const MCP_PROXY_TIMEOUT_MS = 30_000;
 
+type McpProxyContext = {
+  agentId?: string;
+  repoId?: string;
+  timeoutMs?: number;
+  /**
+   * Per-call overrides of the server's stored (non-secret) headers, matched
+   * case-insensitively. A string replaces the header; null drops it. Never
+   * applies to `Authorization`.
+   */
+  headerOverrides?: Record<string, string | null>;
+};
+
+function applyHeaderOverrides(
+  headers: Record<string, string>,
+  overrides: Record<string, string | null> | undefined,
+): Record<string, string> {
+  if (!overrides) return headers;
+  const result = { ...headers };
+  for (const [name, value] of Object.entries(overrides)) {
+    const lower = name.toLowerCase();
+    if (lower === "authorization") continue;
+    for (const key of Object.keys(result)) {
+      if (key.toLowerCase() === lower) delete result[key];
+    }
+    if (value !== null) result[name] = value;
+  }
+  return result;
+}
+
 function parseHeadersJson(value: string | null): Record<string, string> {
   if (!value) return {};
   try {
@@ -89,7 +118,7 @@ async function resolveMcpHeaders(
 
 async function createMcpServerClient(
   serverId: string,
-  context: { agentId?: string; repoId?: string; timeoutMs?: number } = {},
+  context: McpProxyContext = {},
 ): Promise<McpHttpClient> {
   const server = await getMcpServerById(serverId);
   if (!server) throw new Error("MCP server not found");
@@ -114,13 +143,16 @@ async function createMcpServerClient(
     validateUrl: (url) => assertUrlSafe(url, publicEndpointSsrfOptions()),
   });
   client.useRawUrl = true;
-  client.customHeaders = await resolveMcpHeaders(server, context);
+  client.customHeaders = applyHeaderOverrides(
+    await resolveMcpHeaders(server, context),
+    context.headerOverrides,
+  );
   return client;
 }
 
 export async function listMcpServerTools(
   serverId: string,
-  context: { agentId?: string; repoId?: string; timeoutMs?: number } = {},
+  context: McpProxyContext = {},
 ): Promise<McpTool[]> {
   const client = await createMcpServerClient(serverId, context);
   await client.initialize();
@@ -131,7 +163,7 @@ export async function callMcpServerTool(
   serverId: string,
   tool: string,
   args: Record<string, unknown>,
-  context: { agentId?: string; repoId?: string; timeoutMs?: number } = {},
+  context: McpProxyContext = {},
 ): Promise<McpToolCallEnvelope> {
   const client = await createMcpServerClient(serverId, context);
   await client.initialize();

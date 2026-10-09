@@ -260,6 +260,21 @@ describe("scrubSecrets — regex patterns", () => {
     expect(out).not.toContain("lin_api_test123");
   });
 
+  test("redacts PostHog personal, OAuth access and refresh tokens", () => {
+    for (const prefix of ["phx", "pha", "phr"]) {
+      const token = `${prefix}_aBcD1234eFgH5678iJkL9012mNoP3456qRsT`;
+      const out = scrubSecrets(`Authorization: Bearer ${token} tail`);
+      expect(out).toContain("[REDACTED:posthog_token]");
+      expect(out).not.toContain(token);
+    }
+  });
+
+  test("leaves public PostHog project keys (phc_) and short ph*_ words alone", () => {
+    const projectKey = "phc_aBcD1234eFgH5678iJkL9012mNoP3456qRsT"; // gitleaks:allow fake public key
+    expect(scrubSecrets(`posthog.init('${projectKey}')`)).toContain(projectKey);
+    expect(scrubSecrets("see phx_docs for details")).toBe("see phx_docs for details");
+  });
+
   test("redacts npm tokens", () => {
     const out = scrubSecrets("npm=npm_abcdefghijklmnopqrstuvwxyz01234");
     expect(out).toContain("[REDACTED:npm_token]");

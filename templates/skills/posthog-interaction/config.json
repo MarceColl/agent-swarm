@@ -1,0 +1,15 @@
+{
+  "kind": "skill",
+  "name": "posthog-interaction",
+  "displayName": "PostHog Interaction",
+  "slug": "posthog-interaction",
+  "title": "PostHog Interaction",
+  "description": "PostHog analytics through the PostHog MCP tools: schema discovery, HogQL via execute-sql, trends, funnels, saved insights, flags, experiments, and error tracking for the operator-pinned project.",
+  "version": "1.0.0",
+  "category": "skills",
+  "placeholders": [],
+  "runAllSeedersCandidate": true,
+  "systemDefault": true,
+  "userInvocable": false,
+  "tags": ["posthog", "analytics", "product-analytics", "mcp"]
+}

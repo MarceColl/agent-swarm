@@ -642,6 +642,18 @@ export const INTEGRATIONS: IntegrationDef[] = [
     docsUrl: "https://docs.agent-swarm.dev/docs/integrations/posthog",
     restartRequired: false,
     specialFlow: "posthog-mcp",
+    recommendedSkills: [
+      {
+        name: "posthog-interaction",
+        source: "template",
+        templateRepo: "desplega-ai/agent-swarm",
+        templatePath: "templates/skills/posthog-interaction",
+        roles: ["lead", "worker"],
+        reason:
+          "Canonical recipes for the PostHog MCP tools: schema discovery before HogQL, bounded execute-sql queries, saved insights, and the read-only and AI-billed tool rules.",
+        installOnSetup: true,
+      },
+    ],
     fields: [],
   },
 

@@ -142,6 +142,12 @@ import phaseRunningContent from "../../../templates/skills/phase-running/content
 };
 import planningConfig from "../../../templates/skills/planning/config.json" with { type: "text" };
 import planningContent from "../../../templates/skills/planning/content.md" with { type: "text" };
+import posthogInteractionConfig from "../../../templates/skills/posthog-interaction/config.json" with {
+  type: "text",
+};
+import posthogInteractionContent from "../../../templates/skills/posthog-interaction/content.md" with {
+  type: "text",
+};
 import qaConfig from "../../../templates/skills/qa/config.json" with { type: "text" };
 import qaContent from "../../../templates/skills/qa/content.md" with { type: "text" };
 import questioningConfig from "../../../templates/skills/questioning/config.json" with {
@@ -346,6 +352,7 @@ const BUILT_IN_SKILL_SOURCES = [
   { config: pagesConfig, body: pagesContent },
   { config: phaseRunningConfig, body: phaseRunningContent },
   { config: planningConfig, body: planningContent },
+  { config: posthogInteractionConfig, body: posthogInteractionContent },
   { config: qaConfig, body: qaContent },
   { config: questioningConfig, body: questioningContent },
   { config: researchingConfig, body: researchingContent },

@@ -1,0 +1,152 @@
+---
+title: PostHog
+description: Connect PostHog's hosted MCP server over OAuth so agents can query insights, run HogQL, and read flags, experiments, dashboards, and error tracking for one pinned project.
+---
+
+Agent Swarm connects to [PostHog](https://posthog.com/) through PostHog's hosted [MCP server](https://posthog.com/docs/model-context-protocol). You connect your PostHog account once from the Integrations page. Agents you choose then get PostHog's MCP tools, scoped to the project you pin.
+
+<Callout type="info">
+The connection is swarm-wide. One PostHog account, one region, and one pinned project serve every agent you install it on. Per-user PostHog tokens are not supported.
+</Callout>
+
+## What it does
+
+- **Registers PostHog as an MCP server.** The guided flow creates one global MCP server named `posthog` on the HTTP transport. It also appears on the **MCP Servers** page.
+- **Authenticates with OAuth.** The swarm registers itself with PostHog through dynamic client registration, so you do not create an OAuth app by hand. Tokens are stored encrypted and refreshed by the API server.
+- **Pins one project.** The swarm sends `x-posthog-project-id` and `x-posthog-organization-id` headers, so every agent queries the same project.
+- **Is read-only by default.** Agents can read data but cannot change flags, dashboards, or other PostHog objects.
+- **Installs on the agents you choose.** Only those agents see the PostHog tools.
+
+## Setup
+
+### 1. Open the PostHog card
+
+In the dashboard, go to **Integrations** and open the **PostHog** card.
+
+### 2. Pick a region and mode
+
+| Setting | Options | Default |
+|---|---|---|
+| Region | **US** (`https://mcp.posthog.com/mcp`) or **EU** (`https://mcp-eu.posthog.com/mcp`) | US |
+| Read-only | On or off | On |
+
+Pick the region that hosts your PostHog account. Keep read-only on unless agents must write to PostHog. Click **Save**.
+
+### 3. Connect your PostHog account
+
+Click **Connect PostHog**. Your browser goes to PostHog's consent screen. Sign in with the account you want agents to use and approve access. The browser then returns to the Integrations page.
+
+<Callout type="warn">
+PostHog only accepts HTTPS redirect URIs, except for loopback addresses. The redirect URI is built from `PUBLIC_MCP_BASE_URL`, or `MCP_BASE_URL` when that is unset. On a deployed swarm, set it to the public HTTPS origin of your API server. See [Troubleshooting](#troubleshooting).
+</Callout>
+
+### 4. Pick an organization and project
+
+After you connect, the card lists the organizations and projects your account can see. Pick one project and click **Save**. The swarm pins it for all agents.
+
+### 5. Choose agents
+
+Select the agents that should get PostHog tools and click **Save**. The swarm installs the `posthog` MCP server on each one.
+
+Agents pick up the tools in their next session. You do not need to restart any worker.
+
+### Disconnect and reconnect
+
+- **Disconnect** removes the stored tokens. Agents lose PostHog access in their next session.
+- **Reconnect** runs the OAuth flow again. Use it when the status shows `expired`, or after you change read-only mode.
+
+## What agents can do
+
+With the server installed, an agent can use PostHog's [MCP tools](https://posthog.com/docs/model-context-protocol/tools) against the pinned project. Common ones:
+
+| Area | Tools |
+|---|---|
+| Schema discovery | `read-data-schema` |
+| SQL | `execute-sql` (HogQL) |
+| Standard analytics | `query-trends`, `query-funnel`, `query-retention` |
+| Saved insights | `insight-query`, `insight-get` |
+| Dashboards | `dashboards-get-all`, `dashboard-get` |
+| Feature flags | `feature-flag-get-all`, `feature-flag-get-definition` |
+| Experiments | `experiment-list`, `experiment-get`, `experiment-results-get` |
+| Error tracking | `query-error-tracking-issues-list`, `query-error-tracking-issue` |
+| Surveys | `surveys-get-all`, `survey-get`, `survey-stats` |
+| Documentation | `docs-search` |
+
+PostHog changes this list over time. The tool list on PostHog's site is the source of truth.
+
+The seeded `posthog-interaction` skill teaches agents how to use these tools well. For example, agents read the schema before they write SQL, put a `LIMIT` and a time range on every query, and link the insight or dashboard they used.
+
+## Region notes
+
+- The US host routes requests to the region of the account that signed in. PostHog still recommends the EU host for EU accounts, so the OAuth flow lands on the EU instance. Pick **EU** if your account is on `eu.posthog.com`.
+- Changing the region clears the connection. The token belongs to the old host, so you must connect again.
+- The guided flow supports one connection per swarm. If you have accounts in both regions, add the second one as a separate server through the [advanced path](#advanced-self-hosted-posthog-or-a-personal-api-key).
+
+## Read-only mode and scopes
+
+When read-only is on, the swarm:
+
+- requests only the `*:read` scopes, plus `openid`, `profile`, and `email`
+- sends `x-posthog-read-only: true`, so PostHog hides tools that create, update, or delete data
+
+Turning read-only off does not grant write access by itself. The existing token only has read scopes. Click **Reconnect** and approve the write scopes on PostHog's consent screen.
+
+<Callout type="warn">
+Some PostHog MCP tools call an LLM internally. PostHog may bill those calls as PostHog AI usage, even in read-only mode. These tools only appear when [AI data processing](https://posthog.com/docs/posthog-ai/allow-access) is enabled for your PostHog organization. See the [PostHog MCP FAQ](https://posthog.com/docs/model-context-protocol/faq).
+</Callout>
+
+## Advanced: self-hosted PostHog or a personal API key
+
+The guided flow only supports PostHog Cloud with OAuth. For anything else, register the server yourself as a generic MCP server.
+
+- **Self-hosted PostHog.** PostHog's hosted MCP server only talks to PostHog Cloud. Run PostHog's [MCP server](https://github.com/PostHog/posthog/tree/master/services/mcp) yourself and set `POSTHOG_API_BASE_URL` to your instance. Use your server's URL below.
+- **Personal API key.** Create a [personal API key](https://app.posthog.com/settings/user-api-keys?preset=mcp_server) with the **MCP Server** preset. The preset scopes the key to one project.
+
+Then:
+
+1. Go to **Settings → Secrets** and add a secret, for example `POSTHOG_MCP_AUTH`. Set its value to the full header value, `Bearer phx_...`.
+2. Create an MCP server with HTTP transport, the PostHog MCP URL, and a header config key that maps `Authorization` to that secret. The dashboard's **Add MCP Server** dialog does not set header config keys, so use the API or the lead's [`mcp-server-create`](/docs/reference/mcp-tools#mcp-server-create) tool:
+
+```bash
+curl -X POST "$MCP_BASE_URL/api/mcp-servers" \
+  -H "Authorization: Bearer $AGENT_SWARM_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "posthog-eu",
+    "transport": "http",
+    "scope": "global",
+    "url": "https://mcp-eu.posthog.com/mcp",
+    "headers": "{\"x-posthog-read-only\": \"true\"}",
+    "headerConfigKeys": "{\"Authorization\": \"POSTHOG_MCP_AUTH\"}"
+  }'
+```
+
+3. Install the server on agents from the **MCP Servers** page, or with [`mcp-server-install`](/docs/reference/mcp-tools#mcp-server-install).
+
+Add `x-posthog-project-id` to `headers` if you want to pin a project. Do not put the API key in `headers`. That field is not secret.
+
+## Troubleshooting
+
+### Status shows `expired`
+
+The stored token can no longer be refreshed. This can happen when nobody uses PostHog for a long time, or when access was revoked in PostHog. Click **Reconnect** on the PostHog card.
+
+### The consent screen rejects the redirect URI
+
+PostHog requires an HTTPS redirect URI, except for loopback. The swarm sends `${PUBLIC_MCP_BASE_URL or MCP_BASE_URL}/api/mcp-oauth/callback`. Set one of them to your API server's public HTTPS origin. For local development, use `http://localhost:3013`.
+
+### PostHog calls fail with `401` in a long session
+
+The swarm gives agents the access token when a session starts. A long session can outlive that token. Start a new session. The API server refreshes the token before it hands it out again.
+
+### An agent has no PostHog tools
+
+Check that the PostHog card shows a connected status and that the agent is selected under agents. Tools reach agents in new sessions, so an already running session does not see them.
+
+## Related docs
+
+- [PostHog MCP overview](https://posthog.com/docs/model-context-protocol)
+- [PostHog MCP FAQ](https://posthog.com/docs/model-context-protocol/faq): pinning, read-only mode, tool filters, regions
+- [PostHog MCP tools](https://posthog.com/docs/model-context-protocol/tools)
+- [MCP Tools reference](/docs/reference/mcp-tools#mcp-server-tools): `mcp-server-create`, `mcp-server-install`, and related tools
+- [Environment Variables](/docs/reference/environment-variables): the `PUBLIC_MCP_BASE_URL` and `MCP_BASE_URL` fallback chain

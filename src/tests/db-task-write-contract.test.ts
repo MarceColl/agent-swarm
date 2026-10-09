@@ -337,6 +337,7 @@ value:getLogsByTaskIdAndEventType
 value:getLogsByTaskIdChronological
 value:getMcpServerById
 value:getMcpServerByName
+value:getMcpServerInstalledAgentIds
 value:getMentionsForAgent
 value:getMessageById
 value:getMetric

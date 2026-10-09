@@ -262,6 +262,7 @@ export {
   getContextVersionHistory,
   getLatestContextVersion,
 } from "./db/context-versions";
+export { getMcpServerInstalledAgentIds } from "./db/mcp-servers";
 export { getScriptRunExecutionArgs } from "./db/script-runs";
 
 configureAgentDependencies({
@@ -11279,15 +11280,6 @@ export async function getAgentMcpServers(
 
   const rows = await getDbClient().query<McpServerWithInstallRow>(query, [agentId]);
   return rows.map(rowToMcpServerWithInstall);
-}
-
-/** Agent IDs with this MCP server installed (any active state), sorted. */
-export async function getMcpServerInstalledAgentIds(mcpServerId: string): Promise<string[]> {
-  const rows = await getDbClient().query<{ agentId: string }>(
-    "SELECT agentId FROM agent_mcp_servers WHERE mcpServerId = ? ORDER BY agentId ASC",
-    [mcpServerId],
-  );
-  return rows.map((row) => row.agentId);
 }
 
 // ============================================================================

@@ -3,6 +3,7 @@ import { useMemo } from "react";
 import { useConfigs } from "@/api/hooks/use-config-api";
 import { useEnvPresence } from "@/api/hooks/use-integrations-meta";
 import { IntegrationCard } from "@/components/integrations/integration-card";
+import { useFlowStatuses } from "@/components/integrations/special-flows";
 import { EmptyState } from "@/components/shared/empty-state";
 import { PageSkeleton } from "@/components/shared/page-skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -55,6 +56,7 @@ export default function IntegrationsPage() {
   }, []);
   const { data: envPresence } = useEnvPresence(allCatalogKeys);
   const presence = envPresence ?? {};
+  const flowStatuses = useFlowStatuses();
 
   // "Fresh swarm" check: nothing in DB AND nothing in deploy env.
   const hasAnyIntegrationConfigured = useMemo(() => {
@@ -201,7 +203,7 @@ export default function IntegrationsPage() {
             {QUICK_PICK_IDS.map((pickId) => {
               const def = INTEGRATIONS.find((i) => i.id === pickId);
               if (!def) return null;
-              const status = deriveIntegrationStatus(def, configs ?? [], presence);
+              const status = deriveIntegrationStatus(def, configs ?? [], presence, flowStatuses);
               return <IntegrationCard key={def.id} def={def} status={status} />;
             })}
           </div>
@@ -253,7 +255,7 @@ export default function IntegrationsPage() {
       ) : (
         <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
           {visible.map((def) => {
-            const status = deriveIntegrationStatus(def, configs ?? [], presence);
+            const status = deriveIntegrationStatus(def, configs ?? [], presence, flowStatuses);
             return <IntegrationCard key={def.id} def={def} status={status} />;
           })}
         </div>

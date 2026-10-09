@@ -1,12 +1,15 @@
-import type { ComponentType } from "react";
+import { type ComponentType, useMemo } from "react";
 import type { EnvPresenceMap } from "@/api/hooks/use-integrations-meta";
+import { usePosthogIntegration } from "@/api/hooks/use-posthog-integration";
 import type { SwarmConfig } from "@/api/types";
 import { ClaudeManagedSection } from "@/components/integrations/claude-managed-section";
 import { CodexOAuthSection } from "@/components/integrations/codex-oauth-section";
 import { JiraOAuthSection } from "@/components/integrations/jira-oauth-section";
 import { LinearOAuthSection } from "@/components/integrations/linear-oauth-section";
 import { MemoryEmbeddingsSection } from "@/components/integrations/memory-embeddings-section";
+import { PosthogSection } from "@/components/integrations/posthog-section";
 import type { IntegrationDef, IntegrationSpecialFlow } from "@/lib/integrations-catalog";
+import { type FlowStatuses, mcpOAuthIntegrationStatus } from "@/lib/integrations-status";
 
 export interface SpecialFlowSectionProps {
   def: IntegrationDef;
@@ -35,4 +38,17 @@ export const SPECIAL_FLOWS: Record<IntegrationSpecialFlow, SpecialFlow> = {
   "claude-managed-cli": { Section: ClaudeManagedSection, genericFields: "shown" },
   "codex-cli": { Section: CodexOAuthSection, genericFields: "replaced" },
   "memory-embeddings": { Section: MemoryEmbeddingsSection, genericFields: "advanced" },
+  "posthog-mcp": { Section: PosthogSection, genericFields: "replaced" },
 };
+
+/**
+ * Live status of flows whose state is not in `swarm_config`, for
+ * `deriveIntegrationStatus`. Flows missing here keep field-presence status.
+ */
+export function useFlowStatuses(): FlowStatuses {
+  const { data: posthog } = usePosthogIntegration();
+  return useMemo(
+    () => (posthog ? { "posthog-mcp": mcpOAuthIntegrationStatus(posthog.oauthStatus) } : {}),
+    [posthog],
+  );
+}

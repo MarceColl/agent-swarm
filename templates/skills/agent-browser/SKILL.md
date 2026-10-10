@@ -79,7 +79,7 @@ agent-fs stat thoughts/<agent-id>/qa/<topic>-screenshots/<name>.png --json      
 agent-fs share-create thoughts/<agent-id>/qa/<topic>-screenshots/<name>.png --json
 ```
 
-- **GitHub PR body or comment**: upload the PNG, GIF or mp4 as a GitHub user attachment with the `github-attach` skill and embed `![caption](https://github.com/user-attachments/assets/<uuid>)`. Attachments never expire and mp4s play inline. A UI PR puts a before (main) and after pair in the `## Before / after` table. Fallback for images only, when the GitHub token is an App token (`ghu_`/`ghs_`): `agent-fs signed-url <path> --inline --json` (expires in 7 days). Never a presigned URL for an mp4 or a doc: it downloads.
+- **GitHub PR body or comment**: upload the PNG, GIF or mp4 as a GitHub user attachment with `gh pr comment <N> --attach <file>#<alt>` (gh 2.102+) and embed `![caption](https://github.com/user-attachments/assets/<uuid>)`. Attachments never expire and mp4s play inline. A UI PR puts a before (main) and after pair in the `## Before / after` table. Fallback for images only, when the GitHub token is an App token (`ghu_`/`ghs_`): `agent-fs signed-url <path> --inline --json` (expires in 7 days). Never a presigned URL for an mp4 or a doc: it downloads.
 - **Linear comment or Slack message**: paste the `share-create` link.
 - In `store-progress`, list the upload in the `attachments` field with `kind: "agent-fs"` and the path, and paste the `share-create` link for people who need to open the file.
 - If `agent-fs auth whoami` fails, report the local path, say the upload was skipped, and continue.

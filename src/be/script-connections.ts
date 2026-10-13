@@ -16,10 +16,11 @@ import {
 } from "@/scripts-runtime/credential-broker";
 import { refreshSecretScrubberCache } from "@/utils/secret-scrubber";
 import { listMcpServerTools } from "./mcp-proxy";
+import { assertPostgresDsn } from "./sql-connections";
 import { readVendoredOpenapiSpec } from "./vendored-openapi";
 
 export type ScriptConnectionScope = "global" | "agent" | "repo";
-export type ScriptConnectionKind = "raw" | "openapi" | "mcp" | "graphql";
+export type ScriptConnectionKind = "raw" | "openapi" | "mcp" | "graphql" | "sql";
 export type ScriptConnectionBaseUrlSource = "user" | "spec";
 export type ScriptConnectionAuthType = "none" | "bearer" | "header" | "query" | "oauth";
 
@@ -108,6 +109,13 @@ export const ConnectionAuthInputSchema = z.discriminatedUnion("type", [
     hosts: authHostsSchema,
   }),
 ]);
+
+/** Postgres DSN for a `sql` connection: an inline secret or an existing swarm_config key. */
+export const SqlDsnInputSchema = z
+  .object({ secret: authSecretSchema, configKey: authConfigKeySchema })
+  .refine((dsn) => (dsn.secret === undefined) !== (dsn.configKey === undefined), {
+    message: "Provide exactly one of `secret` or `configKey` for the SQL DSN.",
+  });
 
 export type ScriptConnectionBaseUrlMismatch = {
   specUrl: string;
@@ -1372,7 +1380,9 @@ function assertConfigKeyNotReserved(auth: ConnectionAuthInput | undefined): void
  */
 function derivedInlineSecretKey(connection: ScriptConnectionRecord | null): string | null {
   if (!connection) return null;
-  if (connection.authType === "none" || connection.authType === "oauth") return null;
+  // sql rows keep auth_type 'none' but own their DSN key in auth_config_key.
+  if (connection.authType === "oauth") return null;
+  if (connection.authType === "none" && connection.kind !== "sql") return null;
   const key = connection.authConfigKey;
   return key && DERIVED_INLINE_SECRET_KEY.test(key) ? key : null;
 }
@@ -1567,6 +1577,7 @@ export async function upsertScriptConnection(data: {
   openapiSpecEtag?: string | null;
   openapiSpecFetchedAt?: string | null;
   mcpServerId?: string | null;
+  sqlDsn?: z.infer<typeof SqlDsnInputSchema>;
   enabled?: boolean;
   agentId?: string;
   userId?: string | null;
@@ -1610,6 +1621,9 @@ export async function upsertScriptConnection(data: {
       "MCP connections resolve auth through their MCP server; `auth` is not supported.",
     );
   }
+  if (data.kind === "sql" && data.auth && data.auth.type !== "none") {
+    throw new Error("SQL connections authenticate through their DSN; `auth` is not supported.");
+  }
   // Keep the reserved derived-credential namespaces exclusive so a user-supplied
   // configKey can never collide with (or later be mistaken for) a connection's
   // own derived inline secret. Checked on user input only — reconstruction of an
@@ -1640,7 +1654,7 @@ export async function upsertScriptConnection(data: {
   // binding, e.g. raw-fetch egress) with no `auth`.
   const explicitLegacyBinding = data.auth === undefined && data.credentialBindingId !== undefined;
   const authIntent: ConnectionAuthInput =
-    data.kind === "mcp" || explicitLegacyBinding
+    data.kind === "mcp" || data.kind === "sql" || explicitLegacyBinding
       ? { type: "none" }
       : (data.auth ?? reconstructAuthFromConnection(existingConnection));
   let derived: DerivedConnectionBinding | null = null;
@@ -1797,6 +1811,26 @@ export async function upsertScriptConnection(data: {
     generatedAt = now;
   }
 
+  // The DSN key rides auth_config_key; the DSN itself never enters these artifacts.
+  let sqlDsnKey: string | null = null;
+  let sqlSecretWrite: DerivedConnectionBinding["secretWrite"] = null;
+  if (data.kind === "sql") {
+    if (data.sqlDsn?.secret !== undefined) {
+      assertPostgresDsn(data.sqlDsn.secret);
+      sqlDsnKey = `connection.${normalizedSlug}.secret`;
+      sqlSecretWrite = { scope, scopeId, key: sqlDsnKey, value: data.sqlDsn.secret };
+    } else if (data.sqlDsn?.configKey) {
+      assertConfigKeyNotReserved({ type: "bearer", configKey: data.sqlDsn.configKey });
+      sqlDsnKey = data.sqlDsn.configKey;
+    } else {
+      sqlDsnKey = existingConnection?.kind === "sql" ? existingConnection.authConfigKey : null;
+    }
+    if (!sqlDsnKey) throw new Error("SQL connections require `dsn.secret` or `dsn.configKey`.");
+    generatedRuntimeJson = JSON.stringify({ slug: normalizedSlug, kind: "sql", connectionId });
+    generatedTypes = `export interface ${pascal(normalizedSlug)}Api {\n  /** One read-only statement; pass values via params ($1, $2, ...). */\n  query<T = Record<string, JsonValue>>(sql: string, params?: JsonValue[]): Promise<{ rows: T[]; rowCount: number; truncated: boolean }>;\n}`;
+    generatedAt = now;
+  }
+
   if (data.kind !== "graphql") {
     allowedHosts =
       data.allowedHosts ?? (effectiveBaseUrl ? [new URL(effectiveBaseUrl).hostname] : []);
@@ -1810,7 +1844,8 @@ export async function upsertScriptConnection(data: {
   // metadata-only rename reconstructs the old derived key as an explicit
   // configKey and keeps referencing it, so it must NOT be deleted.
   const oldDerivedSecretKey = derivedInlineSecretKey(existingConnection);
-  const newReferencedConfigKey = derived?.configKey ?? explicitBinding?.configKey ?? null;
+  const newReferencedConfigKey =
+    derived?.configKey ?? explicitBinding?.configKey ?? sqlDsnKey ?? null;
   let supersededSecretDeleted = false;
 
   // Connection row and its auto-managed binding form a reference cycle
@@ -1824,6 +1859,7 @@ export async function upsertScriptConnection(data: {
       if (derived?.secretWrite) {
         await upsertSwarmConfig({ ...derived.secretWrite, isSecret: true });
       }
+      if (sqlSecretWrite) await upsertSwarmConfig({ ...sqlSecretWrite, isSecret: true });
 
       // Drop a superseded derived inline secret (see oldDerivedSecretKey above).
       // Skip when the connection's binding still references that same key (same
@@ -1876,6 +1912,7 @@ export async function upsertScriptConnection(data: {
             : (existingConnection?.credentialBindingId ?? null);
         authCols = NONE_AUTH_COLUMNS;
       }
+      if (sqlDsnKey) authCols = { ...NONE_AUTH_COLUMNS, authConfigKey: sqlDsnKey };
 
       const params = [
         normalizedSlug,
@@ -1953,7 +1990,9 @@ export async function upsertScriptConnection(data: {
     });
 
   const row = await writeConnectionAndBinding();
-  if (derived?.secretWrite || supersededSecretDeleted) refreshSecretScrubberCache();
+  if (derived?.secretWrite || sqlSecretWrite || supersededSecretDeleted) {
+    refreshSecretScrubberCache();
+  }
   return connectionFromRow(row);
 }
 

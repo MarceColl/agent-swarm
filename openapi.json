@@ -35222,7 +35222,8 @@
               "enum": [
                 "openapi",
                 "graphql",
-                "mcp"
+                "mcp",
+                "sql"
               ]
             },
             "required": false,
@@ -35282,7 +35283,8 @@
                               "raw",
                               "openapi",
                               "mcp",
-                              "graphql"
+                              "graphql",
+                              "sql"
                             ]
                           },
                           "scope": {
@@ -36414,6 +36416,274 @@
                       "kind",
                       "mcpServerId"
                     ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "slug": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80
+                      },
+                      "displayName": {
+                        "type": "string",
+                        "maxLength": 160
+                      },
+                      "scope": {
+                        "type": "string",
+                        "enum": [
+                          "global",
+                          "agent",
+                          "repo"
+                        ]
+                      },
+                      "scopeId": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "minLength": 1,
+                        "maxLength": 255
+                      },
+                      "allowedHosts": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "credentialBindingId": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "format": "uuid"
+                      },
+                      "auth": {
+                        "oneOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "none"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "type"
+                            ]
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "bearer"
+                                ]
+                              },
+                              "secret": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "configKey": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 255
+                              },
+                              "template": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "hosts": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              }
+                            },
+                            "required": [
+                              "type"
+                            ]
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "header"
+                                ]
+                              },
+                              "headerName": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 255
+                              },
+                              "secret": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "configKey": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 255
+                              },
+                              "template": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "hosts": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "headerName"
+                            ]
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "query"
+                                ]
+                              },
+                              "paramName": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 255
+                              },
+                              "secret": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "configKey": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 255
+                              },
+                              "template": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "hosts": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "paramName"
+                            ]
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "oauth"
+                                ]
+                              },
+                              "authorizationId": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 255
+                              },
+                              "configKey": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 255
+                              },
+                              "template": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "hosts": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "authorizationId"
+                            ]
+                          }
+                        ]
+                      },
+                      "configKey": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 255
+                      },
+                      "headerTemplate": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "queryTemplate": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "authKind": {
+                        "type": "string",
+                        "enum": [
+                          "config",
+                          "oauth"
+                        ]
+                      },
+                      "oauthAuthorizationId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 255
+                      },
+                      "enabled": {
+                        "type": "boolean"
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "sql"
+                        ]
+                      },
+                      "dsn": {
+                        "type": "object",
+                        "properties": {
+                          "secret": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "configKey": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 255
+                          }
+                        }
+                      }
+                    },
+                    "required": [
+                      "slug",
+                      "kind"
+                    ]
                   }
                 ]
               }
@@ -36449,7 +36719,8 @@
                             "raw",
                             "openapi",
                             "mcp",
-                            "graphql"
+                            "graphql",
+                            "sql"
                           ]
                         },
                         "scope": {
@@ -36824,7 +37095,8 @@
                             "raw",
                             "openapi",
                             "mcp",
-                            "graphql"
+                            "graphql",
+                            "sql"
                           ]
                         },
                         "scope": {
@@ -37302,7 +37574,8 @@
                             "raw",
                             "openapi",
                             "mcp",
-                            "graphql"
+                            "graphql",
+                            "sql"
                           ]
                         },
                         "scope": {
@@ -37704,7 +37977,8 @@
                             "raw",
                             "openapi",
                             "mcp",
-                            "graphql"
+                            "graphql",
+                            "sql"
                           ]
                         },
                         "scope": {

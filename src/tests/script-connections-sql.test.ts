@@ -1,20 +1,39 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { unlink } from "node:fs/promises";
-import type { IncomingMessage, ServerResponse } from "node:http";
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { Readable } from "node:stream";
-import { closeDb, createAgent, getDb, getDbClient, initDb } from "../be/db";
-import { getScriptConnectionById, upsertScriptConnection } from "../be/script-connections";
+import { SQL } from "bun";
+import { closeDb, createAgent, getDb, getDbClient, initDb, upsertSwarmConfig } from "../be/db";
+import {
+  getScriptApiConnectionDescriptors,
+  getScriptApiTypes,
+  getScriptConnectionById,
+  setScriptConnectionEnabled,
+  upsertScriptConnection,
+} from "../be/script-connections";
+import { buildScriptCredentialBindings } from "../be/script-credential-broker";
+import { typecheckScript } from "../be/scripts/typecheck";
+import { runReadOnlyQuery, SQL_MAX_ROWS, setSqlExecutorForTesting } from "../be/sql-connections";
+import { handleScriptConnectionProxy } from "../http/script-connection-proxy";
 import { handleScriptConnections } from "../http/script-connections";
 import { getPathSegments, parseQueryParams } from "../http/utils";
+import { createApiRegistryClient } from "../scripts-runtime/api-client";
+import { runScript } from "../scripts-runtime/loader";
+import { SwarmConfig } from "../scripts-runtime/swarm-config";
 import { refreshSecretScrubberCache } from "../utils/secret-scrubber";
+import { SKIP_SANDBOX_SPAWN_TESTS } from "./sandbox-spawn-test-helpers";
+import { listenOnFreePort } from "./test-net";
 
 const TEST_DB_PATH = "./test-script-connections-sql.sqlite";
 const API_KEY = "example-test-script-connections-sql-key-1234567890";
 const DSN = "postgres://reader:sql-conn-test-password-123@db.internal.test:5432/analytics";
+const REAL_PG_URL = process.env.SQL_CONNECTION_TEST_URL;
+const spawnTest = test.skipIf(SKIP_SANDBOX_SPAWN_TESTS);
 
 let leadId: string;
 let workerId: string;
+let executorCalls: Array<{ dsn: string; query: string; params: unknown[] }> = [];
 const savedEnv = { ...process.env };
 
 async function removeDbFiles(path: string): Promise<void> {
@@ -57,9 +76,10 @@ async function dispatch(
   } as unknown as ServerResponse;
   const pathSegments = getPathSegments(path);
   const queryParams = parseQueryParams(path);
-  if (!(await handleScriptConnections(req, res, pathSegments, queryParams, init.agentId))) {
-    status = 404;
-  }
+  const handled =
+    (await handleScriptConnectionProxy(req, res, pathSegments, queryParams, init.agentId)) ||
+    (await handleScriptConnections(req, res, pathSegments, queryParams, init.agentId));
+  if (!handled) status = 404;
   return { status, text, json: () => JSON.parse(text) };
 }
 
@@ -68,6 +88,14 @@ function registerSql(body: Record<string, unknown>, agentId = leadId) {
     method: "POST",
     agentId,
     body: { kind: "sql", slug: "analytics", ...body },
+  });
+}
+
+function sqlQuery(connectionId: string, agentId: string, body: Record<string, unknown>) {
+  return dispatch(`/api/script-connections/${connectionId}/sql-query`, {
+    method: "POST",
+    agentId,
+    body,
   });
 }
 
@@ -90,6 +118,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  setSqlExecutorForTesting(null);
   closeDb();
   await removeDbFiles(TEST_DB_PATH);
   for (const key of Object.keys(process.env)) {
@@ -107,6 +136,11 @@ beforeEach(async () => {
   await client.run("DELETE FROM agents");
   leadId = (await createAgent({ name: "sql-lead", isLead: true, status: "idle" })).id;
   workerId = (await createAgent({ name: "sql-worker", isLead: false, status: "idle" })).id;
+  executorCalls = [];
+  setSqlExecutorForTesting(async (dsn, query, params) => {
+    executorCalls.push({ dsn, query, params });
+    return [{ x: 1 }];
+  });
 });
 
 describe("migration 213", () => {
@@ -258,5 +292,306 @@ describe("sql connection registration", () => {
     });
     expect(await configRows("connection.analytics.secret")).toHaveLength(0);
     expect(await configRows("connection.warehouse.secret")).toHaveLength(1);
+  });
+
+  test("descriptors and types expose ctx.api.<slug>.query and typecheck", async () => {
+    const created = (await registerSql({ dsn: { secret: DSN } })).json().connection as {
+      id: string;
+    };
+    expect(getScriptApiConnectionDescriptors({ agentId: workerId })).toContainEqual({
+      slug: "analytics",
+      kind: "sql",
+      connectionId: created.id,
+    });
+    expect(getScriptApiTypes({ agentId: workerId })).toContain("query<T");
+
+    const typecheck = await typecheckScript(
+      `
+        import type { ScriptMain } from "swarm-sdk";
+        const main: ScriptMain = async (_args, ctx) => {
+          const { rows, rowCount, truncated } = await ctx.api.analytics.query("select $1::int as x", [1]);
+          return { rows, rowCount, truncated };
+        };
+        export default main;
+      `,
+      { agentId: workerId },
+    );
+    expect(typecheck).toEqual({ ok: true });
+  });
+});
+
+describe("sql-query route", () => {
+  async function createSql(extra: Parameters<typeof upsertScriptConnection>[0] | object = {}) {
+    return upsertScriptConnection({
+      slug: "analytics",
+      kind: "sql",
+      sqlDsn: { secret: DSN },
+      ...extra,
+    });
+  }
+
+  test("a non-lead agent runs a query with the server-resolved DSN", async () => {
+    const connection = await createSql();
+    const response = await sqlQuery(connection.id, workerId, {
+      sql: "select $1::int as x",
+      params: [1],
+    });
+    expect(response.status).toBe(200);
+    expect(response.json()).toEqual({ ok: true, rows: [{ x: 1 }], rowCount: 1, truncated: false });
+    expect(response.text).not.toContain("postgres://");
+    expect(executorCalls).toEqual([{ dsn: DSN, query: "select $1::int as x", params: [1] }]);
+  });
+
+  test("gates: disabled, agent scope, wrong kind, unknown id", async () => {
+    const connection = await createSql();
+    await setScriptConnectionEnabled(connection.id, false);
+    expect((await sqlQuery(connection.id, workerId, { sql: "select 1" })).status).toBe(403);
+
+    const owned = await createSql({ slug: "owned", scope: "agent", scopeId: leadId });
+    expect((await sqlQuery(owned.id, workerId, { sql: "select 1" })).status).toBe(403);
+
+    const graphql = await upsertScriptConnection({
+      slug: "vendor",
+      kind: "graphql",
+      baseUrl: "https://vendor.example.test/graphql",
+      allowedHosts: ["vendor.example.test"],
+    });
+    expect((await sqlQuery(graphql.id, workerId, { sql: "select 1" })).status).toBe(400);
+    const enabledSql = await createSql({ slug: "enabled" });
+    const mcpCall = await dispatch(`/api/script-connections/${enabledSql.id}/mcp-call`, {
+      method: "POST",
+      agentId: workerId,
+      body: { tool: "query" },
+    });
+    expect(mcpCall.status).toBe(400);
+    expect((await sqlQuery(crypto.randomUUID(), workerId, { sql: "select 1" })).status).toBe(404);
+    expect(executorCalls).toHaveLength(0);
+  });
+
+  test("repo-scoped connections resolve the repo-scope secret", async () => {
+    const repoId = crypto.randomUUID();
+    const connection = await createSql({ scope: "repo", scopeId: repoId });
+    expect(await configRows("connection.analytics.secret")).toEqual([
+      expect.objectContaining({ scope: "repo", scopeId: repoId }),
+    ]);
+    const response = await sqlQuery(connection.id, workerId, { sql: "select 1" });
+    expect(response.json()).toMatchObject({ ok: true });
+    expect(executorCalls[0]?.dsn).toBe(DSN);
+  });
+
+  test("never falls back to process.env for the DSN key", async () => {
+    process.env.ANALYTICS_ENV_DSN = DSN;
+    try {
+      const connection = await createSql({ sqlDsn: { configKey: "ANALYTICS_ENV_DSN" } });
+      const response = await sqlQuery(connection.id, workerId, { sql: "select 1" });
+      expect(response.json()).toEqual({
+        ok: false,
+        error: "SQL connection DSN 'ANALYTICS_ENV_DSN' is not set.",
+      });
+      expect(executorCalls).toHaveLength(0);
+    } finally {
+      delete process.env.ANALYTICS_ENV_DSN;
+    }
+  });
+
+  test("a stored non-Postgres DSN is refused before any connection", async () => {
+    await upsertSwarmConfig({
+      scope: "global",
+      key: "LOCAL_FILE_DSN",
+      value: "sqlite:///tmp/agent-swarm-db.sqlite",
+      isSecret: true,
+    });
+    const connection = await createSql({ sqlDsn: { configKey: "LOCAL_FILE_DSN" } });
+    const response = await sqlQuery(connection.id, workerId, { sql: "select 1" });
+    expect(response.json()).toMatchObject({ ok: false });
+    expect(response.text).not.toContain("sqlite:///");
+    expect(executorCalls).toHaveLength(0);
+  });
+
+  test("error text is scrubbed of the DSN and its password", async () => {
+    const connection = await createSql();
+    setSqlExecutorForTesting(async () => {
+      throw new Error(`connect failed for ${DSN} (password sql-conn-test-password-123)`);
+    });
+    const response = await sqlQuery(connection.id, workerId, { sql: "select 1" });
+    const body = response.json();
+    expect(body.ok).toBe(false);
+    expect(String(body.error)).toContain("[REDACTED");
+    expect(response.text).not.toContain("sql-conn-test-password-123");
+    expect(response.text).not.toContain("postgres://");
+  });
+
+  test("caps rows and reports truncation", async () => {
+    const connection = await createSql();
+    setSqlExecutorForTesting(async () =>
+      Array.from({ length: SQL_MAX_ROWS + 5 }, (_, i) => ({ i })),
+    );
+    const body = (await sqlQuery(connection.id, workerId, { sql: "select 1" })).json();
+    expect(body).toMatchObject({ ok: true, rowCount: SQL_MAX_ROWS + 5, truncated: true });
+    expect((body.rows as unknown[]).length).toBe(SQL_MAX_ROWS);
+  });
+});
+
+describe("ctx.api sql runtime", () => {
+  test("query posts to the sql-query route as the script's agent", async () => {
+    const calls: Array<{ url: string; agent: string | null; body: unknown }> = [];
+    const savedFetch = globalThis.fetch;
+    globalThis.fetch = (async (input, init) => {
+      calls.push({
+        url: String(input),
+        agent: new Headers(init?.headers).get("x-agent-id"),
+        body: JSON.parse(String(init?.body)),
+      });
+      return Response.json({ ok: true, rows: [{ x: 1 }], rowCount: 1, truncated: false });
+    }) as typeof globalThis.fetch;
+    try {
+      const swarmConfig = new SwarmConfig({
+        system: {
+          apiKey: { value: API_KEY, isSecret: true },
+          agentId: { value: "agent-runtime", isSecret: false },
+          mcpBaseUrl: { value: "http://swarm.test/", isSecret: false },
+        },
+        user: {},
+      });
+      const api = createApiRegistryClient(
+        [{ slug: "analytics", kind: "sql", connectionId: "conn-1" }],
+        { swarmConfig },
+      );
+      expect(await api.analytics!.query!("select $1::int as x", [1])).toEqual({
+        rows: [{ x: 1 }],
+        rowCount: 1,
+        truncated: false,
+      });
+      expect(calls).toEqual([
+        {
+          url: "http://swarm.test/api/script-connections/conn-1/sql-query",
+          agent: "agent-runtime",
+          body: { sql: "select $1::int as x", params: [1] },
+        },
+      ]);
+    } finally {
+      globalThis.fetch = savedFetch;
+    }
+  });
+
+  for (const executor of ["native", "quickjs"]) {
+    spawnTest(`script round trip through the ${executor} executor`, async () => {
+      const connection = await upsertScriptConnection({
+        slug: "analytics",
+        kind: "sql",
+        sqlDsn: { secret: DSN },
+      });
+      const server = createServer((req, res) => {
+        const url = req.url ?? "/";
+        const agentId = req.headers["x-agent-id"] as string | undefined;
+        void handleScriptConnectionProxy(
+          req,
+          res,
+          getPathSegments(url),
+          parseQueryParams(url),
+          agentId,
+        ).then((handled) => {
+          if (!handled) res.writeHead(404).end();
+        });
+      });
+      const port = await listenOnFreePort(server, "127.0.0.1");
+      const savedExecutor = process.env.SCRIPT_EXECUTOR;
+      process.env.SCRIPT_EXECUTOR = executor;
+      try {
+        const apiConnections = getScriptApiConnectionDescriptors({ agentId: workerId });
+        const egressSecrets = await buildScriptCredentialBindings({ agentId: workerId });
+        expect(JSON.stringify({ apiConnections, egressSecrets })).not.toContain("postgres://");
+        const output = await runScript({
+          agentId: workerId,
+          mcpBaseUrl: `http://127.0.0.1:${port}`,
+          apiConnections,
+          egressSecrets,
+          source: `
+            export default async (_args, ctx) => ctx.api.analytics.query("select 1 as x");
+          `,
+        });
+        expect(output.error).toBeUndefined();
+        expect(output.result).toEqual({ rows: [{ x: 1 }], rowCount: 1, truncated: false });
+        expect(executorCalls).toEqual([{ dsn: DSN, query: "select 1 as x", params: [] }]);
+        expect(connection.kind).toBe("sql");
+      } finally {
+        if (savedExecutor === undefined) delete process.env.SCRIPT_EXECUTOR;
+        else process.env.SCRIPT_EXECUTOR = savedExecutor;
+        server.close();
+      }
+    });
+  }
+});
+
+// Opt-in: proves the read-only guarantee against a real Postgres. CI has no Postgres service.
+// SQL_CONNECTION_TEST_URL=postgres://postgres:<pw>@127.0.0.1:55432/postgres
+describe.skipIf(!REAL_PG_URL)("read-only against real Postgres", () => {
+  const dsn = REAL_PG_URL ?? "";
+  const table = "sql_conn_readonly_probe";
+  let admin: SQL;
+
+  async function rowCount(): Promise<number> {
+    const [row] = await admin.unsafe(`select count(*)::int as n from ${table}`);
+    return (row as { n: number }).n;
+  }
+
+  async function sqlState(query: string, params: unknown[] = []): Promise<string> {
+    setSqlExecutorForTesting(null);
+    const err = await runReadOnlyQuery(dsn, query, params).then(
+      () => null,
+      (e: Error) => e,
+    );
+    expect(err).not.toBeNull();
+    return /SQLSTATE (\w+)/.exec(err?.message ?? "")?.[1] ?? "none";
+  }
+
+  beforeAll(async () => {
+    admin = new SQL(dsn);
+    await admin.unsafe(`drop table if exists ${table}`);
+    await admin.unsafe(`create table ${table} (id serial primary key, v int)`);
+    await admin.unsafe(`insert into ${table} (v) values (1), (2)`);
+  });
+
+  afterAll(async () => {
+    await admin.unsafe(`drop table if exists ${table}`);
+    await admin.close();
+  });
+
+  beforeEach(() => setSqlExecutorForTesting(null));
+
+  test("select returns rows", async () => {
+    const result = await runReadOnlyQuery(dsn, `select v from ${table} where v = $1`, [2]);
+    expect(result).toEqual({ rows: [{ v: 2 }], rowCount: 1, truncated: false });
+    expect(await runReadOnlyQuery(dsn, "select 1 as x")).toMatchObject({ rows: [{ x: 1 }] });
+  });
+
+  test("writes fail with SQLSTATE 25006 (read_only_sql_transaction)", async () => {
+    expect(await sqlState(`insert into ${table} (v) values (3)`)).toBe("25006");
+    expect(await sqlState(`insert into ${table} (v) values ($1)`, [3])).toBe("25006");
+    expect(await sqlState(`update ${table} set v = 9`)).toBe("25006");
+    expect(await sqlState(`delete from ${table}`)).toBe("25006");
+    expect(await sqlState("create table sql_conn_should_not_exist (id int)")).toBe("25006");
+    expect(await sqlState(`select nextval('${table}_id_seq')`)).toBe("25006");
+    expect(await rowCount()).toBe(2);
+  });
+
+  test("multi-statement calls are rejected, with or without params", async () => {
+    // 42601: "cannot insert multiple commands into a prepared statement".
+    expect(await sqlState(`select 1; delete from ${table}`)).toBe("42601");
+    expect(await sqlState(`select $1::int; delete from ${table}`, [1])).toBe("42601");
+    expect(
+      await sqlState(
+        `commit; set default_transaction_read_only = off; commit; insert into ${table} (v) values (4)`,
+      ),
+    ).toBe("42601");
+    expect(await rowCount()).toBe(2);
+  });
+
+  test("session state never carries into the next call", async () => {
+    await runReadOnlyQuery(dsn, "set default_transaction_read_only = off");
+    expect(await sqlState(`insert into ${table} (v) values (5)`)).toBe("25006");
+    await runReadOnlyQuery(dsn, "set transaction read write").catch(() => undefined);
+    expect(await sqlState(`delete from ${table}`)).toBe("25006");
+    expect(await rowCount()).toBe(2);
   });
 });

@@ -2156,7 +2156,7 @@ export function getScriptApiConnectionDescriptors(
   context: { agentId?: string; repoId?: string } = {},
 ): ScriptApiConnectionDescriptor[] {
   return listScriptConnections(context)
-    .filter((connection) => connection.kind === "openapi" || connection.kind === "graphql")
+    .filter((connection) => ["openapi", "graphql", "sql"].includes(connection.kind))
     .map((connection) => {
       if (!connection.generatedRuntimeJson) return null;
       try {
@@ -2184,8 +2184,8 @@ export function getScriptMcpConnectionDescriptors(
 }
 
 export function getScriptApiTypes(context: { agentId?: string; repoId?: string } = {}): string {
-  const connections = listScriptConnections(context).filter(
-    (connection) => connection.kind === "openapi" || connection.kind === "graphql",
+  const connections = listScriptConnections(context).filter((connection) =>
+    ["openapi", "graphql", "sql"].includes(connection.kind),
   );
   const blocks = connections
     .filter((connection) => connection.generatedTypes)

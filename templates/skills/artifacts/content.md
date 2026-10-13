@@ -104,7 +104,7 @@ durable original. Where each kind of content goes:
 
 | Content | Use | Why |
 |---|---|---|
-| Image or GIF in GitHub | GitHub user attachment (`github-attach` skill) | Permanent, renders inline, short URL |
+| Image or GIF in GitHub | GitHub user attachment (`gh pr comment <N> --attach <file>#<alt>`) | Permanent, renders inline, short URL |
 | Video (mp4) in GitHub | GitHub user attachment, else an `agent-fs share-create` link | GitHub plays it inline. A presigned link downloads it |
 | Doc (plan, research, report) | `agent-fs share-create <path> --expires-in 604800` | Preview page, no download |
 | Durable pointer | `live.agent-fs.dev` path, in a PR only under `## Swarm provenance` | Share links die after 7 days, this one does not (needs login) |

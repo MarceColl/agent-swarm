@@ -16,7 +16,7 @@ Risk is how deep to read. Urgency is when. Set Risk yourself; copy Urgency from 
 - low: docs, tests, dependency bumps, copy, isolated UI. The reviewer eyeballs the outline or before/after, then merges.
 
 Links:
-- Image or GIF: GitHub user attachment (github-attach skill). Fallback only: agent-fs signed-url --inline (expires in 7 days).
+- Image or GIF: GitHub user attachment (gh pr comment <N> --attach <file>#<alt>). Fallback only: agent-fs signed-url --inline (expires in 7 days).
 - Video (mp4): GitHub user attachment, else an agent-fs share-create link. Never a presigned link: it downloads.
 - Doc (plan, research, report): agent-fs share-create link.
 - Swarm task, session and workflow-run links, durable agent-fs paths and Slack permalinks: only under ## Swarm provenance.
@@ -50,7 +50,7 @@ Order: schema/API, then types, then behaviour, then files. -->
 
 | Before (main) | After |
 |---|---|
-| ![before](github-attachment-url) | ![after](github-attachment-url) |
+| ![before](user-attachment-url) | ![after](user-attachment-url) |
 
 Recording: a GitHub attachment mp4 on its own line, or an agent-fs share-create link. Required for interaction or flow changes. -->
 

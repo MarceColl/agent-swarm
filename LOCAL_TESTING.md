@@ -482,7 +482,7 @@ Keep the originals on agent-fs under the same QA path. In a PR body or review co
 ```bash
 agent-fs write qa/agent-swarm/$(date +%F)-<topic>/ui-tasks.png --file /tmp/ui-tasks.png -m "<what it shows>"
 agent-fs write qa/agent-swarm/$(date +%F)-<topic>/ui-tasks-1.5x.mp4 --file /tmp/ui-tasks-1.5x.mp4 -m "<flow it demonstrates>"
-# Upload /tmp/ui-tasks.png and /tmp/ui-tasks-1.5x.mp4 with the github-attach skill (or the github-attach swarm script)
+# Upload /tmp/ui-tasks.png and /tmp/ui-tasks-1.5x.mp4 as GitHub user attachments (gh 2.102+): gh pr comment <N> --attach <file>#<alt>
 # -> https://github.com/user-attachments/assets/<uuid>
 ```
 

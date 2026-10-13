@@ -32,7 +32,7 @@ You should be working in a repository cloned to `/workspace/personal/<repo-name>
    - **Review map**: build it from `git diff --stat <base>...HEAD`. One row per area, biggest risk first, with `(+N/-M)`, a depth (🔍 deep, 👀 skim, ⏭ skip for tests and generated files) and what could break.
    - **Change outline**: 1 or 2 views of the shape of the change. Pseudocode with `+`/`-` lines for logic, mermaid for flow, a tree with paths on the nodes for structure.
    - **Swarm provenance** (when you run in the swarm): fill it from your task context. Link the task (`$APP_URL/tasks/<taskId>`) and its tree (`$APP_URL/sessions/<rootTaskId>`), the Slack permalink of the ask if the task came from Slack, any workflow run, and the plan or research as an `agent-fs share-create` link plus its durable `live.agent-fs.dev` path. These auth-gated links go in this section only.
-   - **Media**: images and mp4s as GitHub user attachments (`github-attach` skill), docs as `agent-fs share-create` links. Never a presigned agent-fs URL for docs or videos.
+   - **Media**: images and mp4s as GitHub user attachments (`gh pr comment <N> --attach <file>#<alt>`), docs as `agent-fs share-create` links. Never a presigned agent-fs URL for docs or videos.
 6. **Create the PR/MR** using `gh pr create` or `glab mr create`. `gh pr create --body` does not apply the repo template, so write the filled description to a file and pass it with `--body-file <file>`.
 7. **Check CI status** — After creating the PR, wait ~30 seconds, then check CI with `gh pr checks <pr-number>` (GitHub) or `glab mr view --json pipelines` (GitLab). If any check is failing, investigate the failure, fix it, push the fix, and re-check. Repeat until CI is green.
 8. **Report** the PR/MR URL and CI status.

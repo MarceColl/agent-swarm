@@ -262,6 +262,7 @@ export {
   getContextVersionHistory,
   getLatestContextVersion,
 } from "./db/context-versions";
+export { getMcpServerInstalledAgentIds } from "./db/mcp-servers";
 export { getScriptRunExecutionArgs } from "./db/script-runs";
 
 configureAgentDependencies({

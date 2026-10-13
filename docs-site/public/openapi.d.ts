@@ -7459,6 +7459,875 @@ export interface paths {
         };
         trace?: never;
     };
+    "/api/mcp-oauth/{mcpServerId}/metadata": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Probe OAuth metadata (PRMD + AS) for an MCP server */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    mcpServerId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OAuth metadata or { requiresOAuth: false } */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            /** @enum {boolean} */
+                            requiresOAuth: false;
+                        } | {
+                            resourceUrl: string;
+                            authorizationServerIssuer: string;
+                            authorizeUrl: string;
+                            tokenUrl: string;
+                            revocationUrl: string | null;
+                            registrationEndpoint: string | null;
+                            scopes: string[];
+                            /** @enum {boolean} */
+                            requiresOAuth: true;
+                            dcrSupported: boolean;
+                            bearerMethodsSupported: string[] | null;
+                            tokenEndpointAuthMethodsSupported: string[] | null;
+                        };
+                    };
+                };
+                /** @description MCP has no URL / invalid transport */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description MCP server not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/mcp-oauth/{mcpServerId}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get the current OAuth connection status for an MCP server */
+        get: {
+            parameters: {
+                query?: {
+                    userId?: string;
+                };
+                header?: never;
+                path: {
+                    mcpServerId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Token status (never includes the token value itself) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            mcpServerId: string;
+                            /** @enum {string} */
+                            authMethod: "static" | "oauth" | "auto";
+                            connected: boolean;
+                            token: {
+                                id: string;
+                                /** @enum {string} */
+                                status: "connected" | "expired" | "error" | "revoked";
+                                tokenType: string;
+                                expiresAt: string | null;
+                                scope: string | null;
+                                lastErrorMessage: string | null;
+                                lastRefreshedAt: string | null;
+                                authorizationServerIssuer: string;
+                                resourceUrl: string;
+                                /** @enum {string} */
+                                clientSource: "dcr" | "manual" | "preregistered";
+                                hasRefreshToken: boolean;
+                                createdAt: string;
+                                updatedAt: string;
+                            } | null;
+                        };
+                    };
+                };
+                /** @description MCP server not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/mcp-oauth/{mcpServerId}/authorize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Start an OAuth flow. Redirects to the provider. */
+        get: {
+            parameters: {
+                query?: {
+                    redirect?: string;
+                    userId?: string;
+                    scopes?: string;
+                };
+                header?: never;
+                path: {
+                    mcpServerId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Redirect to authorization server */
+                302: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description MCP has no URL / does not require OAuth */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description MCP server not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/mcp-oauth/{mcpServerId}/authorize-url": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Build an OAuth authorize URL. Returns JSON so the browser can navigate without losing the Bearer auth header. */
+        get: {
+            parameters: {
+                query?: {
+                    redirect?: string;
+                    userId?: string;
+                    scopes?: string;
+                };
+                header?: never;
+                path: {
+                    mcpServerId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description { providerUrl: string } */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            providerUrl: string;
+                        };
+                    };
+                };
+                /** @description MCP has no URL / does not require OAuth */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description MCP server not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/mcp-oauth/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** OAuth redirect target. Exchanges code -> tokens and redirects back to dashboard. */
+        get: {
+            parameters: {
+                query?: {
+                    code?: string;
+                    state?: string;
+                    error?: string;
+                    error_description?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Redirect back to dashboard with oauth=success or oauth=error */
+                302: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Bad state / missing code */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/mcp-oauth/{mcpServerId}/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Force-refresh the access token for an MCP server */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    mcpServerId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": {
+                        userId?: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Refreshed token */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            /** @enum {boolean} */
+                            ok: true;
+                            expiresAt: string | null;
+                            scope: string | null;
+                        };
+                    };
+                };
+                /** @description No token for this MCP server */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description Refresh failed */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/mcp-oauth/{mcpServerId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Revoke and delete the OAuth token for an MCP server */
+        delete: {
+            parameters: {
+                query?: {
+                    userId?: string;
+                };
+                header?: never;
+                path: {
+                    mcpServerId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Token revoked/deleted */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            /** @enum {boolean} */
+                            ok: true;
+                        };
+                    };
+                };
+                /** @description No token for this MCP server */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/mcp-oauth/{mcpServerId}/manual-client": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Register a pre-existing OAuth client (DCR fallback) */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    mcpServerId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": {
+                        clientId: string;
+                        clientSecret?: string;
+                        /** Format: uri */
+                        authorizationServerIssuer?: string;
+                        /** Format: uri */
+                        authorizeUrl?: string;
+                        /** Format: uri */
+                        tokenUrl?: string;
+                        /** Format: uri */
+                        revocationUrl?: string;
+                        scopes?: string[];
+                        /** @enum {string} */
+                        tokenEndpointAuthMethod?: "client_secret_basic" | "client_secret_post" | "none";
+                    };
+                };
+            };
+            responses: {
+                /** @description Pending client stored. Call /authorize to start the flow. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            /** @enum {boolean} */
+                            ok: true;
+                        };
+                    };
+                };
+                /** @description Bad input */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description MCP server not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/mcp-servers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List MCP servers with optional filters */
+        get: {
+            parameters: {
+                query?: {
+                    scope?: string;
+                    transport?: string;
+                    ownerAgentId?: string;
+                    enabled?: string;
+                    search?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description MCP server list */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            servers: components["schemas"]["McpServer"][];
+                            total: number;
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        /** Create a new MCP server */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": {
+                        name: string;
+                        /** @enum {string} */
+                        transport: "stdio" | "http" | "sse";
+                        description?: string;
+                        scope?: string;
+                        ownerAgentId?: string;
+                        command?: string;
+                        args?: string;
+                        url?: string;
+                        headers?: string;
+                        envConfigKeys?: string;
+                        headerConfigKeys?: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description MCP server created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            server: components["schemas"]["McpServer"];
+                        };
+                    };
+                };
+                /** @description Validation error */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/mcp-servers/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get MCP server by ID */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description MCP server details */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["McpServer"];
+                    };
+                };
+                /** @description MCP server not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        /** Update an MCP server */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            responses: {
+                /** @description MCP server updated */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            server: components["schemas"]["McpServer"];
+                        };
+                    };
+                };
+                /** @description MCP server not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        /** Delete an MCP server */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description MCP server deleted */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            success: boolean;
+                            deletedScriptConnectionCount: number;
+                        };
+                    };
+                };
+                /** @description MCP server not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/mcp-servers/{id}/install": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Install MCP server for an agent */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": {
+                        agentId: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description MCP server installed */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            agentMcpServer: components["schemas"]["AgentMcpServer"];
+                        };
+                    };
+                };
+                /** @description MCP server not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/mcp-servers/{id}/install/{agentId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Uninstall MCP server for an agent */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                    agentId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description MCP server uninstalled */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            success: boolean;
+                        };
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agents/{id}/mcp-servers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get all MCP servers installed for an agent */
+        get: {
+            parameters: {
+                query?: {
+                    resolveSecrets?: string;
+                };
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Agent MCP servers list */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            servers: (components["schemas"]["McpServer"] & {
+                                isActive: boolean;
+                                installedAt: string;
+                                resolvedEnv?: {
+                                    [key: string]: string;
+                                };
+                                resolvedHeaders?: {
+                                    [key: string]: string;
+                                };
+                                authError?: string | null;
+                            })[];
+                            total: number;
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/integrations/claude-managed/test": {
         parameters: {
             query?: never;
@@ -7575,6 +8444,188 @@ export interface paths {
                         "application/json": {
                             [key: string]: unknown;
                         };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/integrations/posthog": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get the PostHog integration state (MCP row, pinning, OAuth status, installs). */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description PostHog integration state. Defaults (`mcpServerId: null`, region `us`, read-only, `oauthStatus: none`) when it is not set up. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            mcpServerId: string | null;
+                            /** @enum {string} */
+                            region: "us" | "eu";
+                            readOnly: boolean;
+                            projectId: string | null;
+                            organizationId: string | null;
+                            features: string[] | null;
+                            /** @enum {string} */
+                            oauthStatus: "none" | "connected" | "expired" | "error" | "revoked";
+                            lastErrorMessage: string | null;
+                            installedAgentIds: string[];
+                        };
+                    };
+                };
+            };
+        };
+        /** Create or update the global PostHog MCP server (region, read-only, pinned project/org, features) and diff its agent installs. */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        region: "us" | "eu";
+                        readOnly: boolean;
+                        projectId?: string | null;
+                        organizationId?: string | null;
+                        features?: string[] | null;
+                        agentIds?: string[];
+                    };
+                };
+            };
+            responses: {
+                /** @description Updated PostHog integration state */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            mcpServerId: string | null;
+                            /** @enum {string} */
+                            region: "us" | "eu";
+                            readOnly: boolean;
+                            projectId: string | null;
+                            organizationId: string | null;
+                            features: string[] | null;
+                            /** @enum {string} */
+                            oauthStatus: "none" | "connected" | "expired" | "error" | "revoked";
+                            lastErrorMessage: string | null;
+                            installedAgentIds: string[];
+                        };
+                    };
+                };
+                /** @description Validation error or unknown agent */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description Missing MCP server create/update/install permission */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/integrations/posthog/projects": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the PostHog organizations and projects the connected account can access. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Organizations with their projects */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            organizations: {
+                                id: string;
+                                name: string;
+                                projects: {
+                                    id: string;
+                                    name: string;
+                                }[];
+                            }[];
+                        };
+                    };
+                };
+                /** @description Missing MCP server update permission */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description PostHog is not set up or not connected */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description PostHog MCP call failed */
+                502: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
                     };
                 };
             };
@@ -10277,513 +11328,6 @@ export interface paths {
                 };
             };
         };
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/mcp-oauth/{mcpServerId}/metadata": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Probe OAuth metadata (PRMD + AS) for an MCP server */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    mcpServerId: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OAuth metadata or { requiresOAuth: false } */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": {
-                            /** @enum {boolean} */
-                            requiresOAuth: false;
-                        } | {
-                            resourceUrl: string;
-                            authorizationServerIssuer: string;
-                            authorizeUrl: string;
-                            tokenUrl: string;
-                            revocationUrl: string | null;
-                            registrationEndpoint: string | null;
-                            scopes: string[];
-                            /** @enum {boolean} */
-                            requiresOAuth: true;
-                            dcrSupported: boolean;
-                            bearerMethodsSupported: string[] | null;
-                            tokenEndpointAuthMethodsSupported: string[] | null;
-                        };
-                    };
-                };
-                /** @description MCP has no URL / invalid transport */
-                400: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["ErrorResponse"];
-                    };
-                };
-                /** @description MCP server not found */
-                404: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["ErrorResponse"];
-                    };
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/mcp-oauth/{mcpServerId}/status": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get the current OAuth connection status for an MCP server */
-        get: {
-            parameters: {
-                query?: {
-                    userId?: string;
-                };
-                header?: never;
-                path: {
-                    mcpServerId: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description Token status (never includes the token value itself) */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": {
-                            mcpServerId: string;
-                            /** @enum {string} */
-                            authMethod: "static" | "oauth" | "auto";
-                            connected: boolean;
-                            token: {
-                                id: string;
-                                /** @enum {string} */
-                                status: "connected" | "expired" | "error" | "revoked";
-                                tokenType: string;
-                                expiresAt: string | null;
-                                scope: string | null;
-                                lastErrorMessage: string | null;
-                                lastRefreshedAt: string | null;
-                                authorizationServerIssuer: string;
-                                resourceUrl: string;
-                                /** @enum {string} */
-                                clientSource: "dcr" | "manual" | "preregistered";
-                                hasRefreshToken: boolean;
-                                createdAt: string;
-                                updatedAt: string;
-                            } | null;
-                        };
-                    };
-                };
-                /** @description MCP server not found */
-                404: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["ErrorResponse"];
-                    };
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/mcp-oauth/{mcpServerId}/authorize": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Start an OAuth flow. Redirects to the provider. */
-        get: {
-            parameters: {
-                query?: {
-                    redirect?: string;
-                    userId?: string;
-                    scopes?: string;
-                };
-                header?: never;
-                path: {
-                    mcpServerId: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description Redirect to authorization server */
-                302: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-                /** @description MCP has no URL / does not require OAuth */
-                400: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["ErrorResponse"];
-                    };
-                };
-                /** @description MCP server not found */
-                404: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["ErrorResponse"];
-                    };
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/mcp-oauth/{mcpServerId}/authorize-url": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Build an OAuth authorize URL. Returns JSON so the browser can navigate without losing the Bearer auth header. */
-        get: {
-            parameters: {
-                query?: {
-                    redirect?: string;
-                    userId?: string;
-                    scopes?: string;
-                };
-                header?: never;
-                path: {
-                    mcpServerId: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description { providerUrl: string } */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": {
-                            providerUrl: string;
-                        };
-                    };
-                };
-                /** @description MCP has no URL / does not require OAuth */
-                400: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["ErrorResponse"];
-                    };
-                };
-                /** @description MCP server not found */
-                404: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["ErrorResponse"];
-                    };
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/mcp-oauth/callback": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** OAuth redirect target. Exchanges code -> tokens and redirects back to dashboard. */
-        get: {
-            parameters: {
-                query?: {
-                    code?: string;
-                    state?: string;
-                    error?: string;
-                    error_description?: string;
-                };
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description Redirect back to dashboard with oauth=success or oauth=error */
-                302: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-                /** @description Bad state / missing code */
-                400: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["ErrorResponse"];
-                    };
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/mcp-oauth/{mcpServerId}/refresh": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Force-refresh the access token for an MCP server */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    mcpServerId: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: {
-                content: {
-                    "application/json": {
-                        userId?: string;
-                    };
-                };
-            };
-            responses: {
-                /** @description Refreshed token */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": {
-                            /** @enum {boolean} */
-                            ok: true;
-                            expiresAt: string | null;
-                            scope: string | null;
-                        };
-                    };
-                };
-                /** @description No token for this MCP server */
-                404: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["ErrorResponse"];
-                    };
-                };
-                /** @description Refresh failed */
-                500: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["ErrorResponse"];
-                    };
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/mcp-oauth/{mcpServerId}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /** Revoke and delete the OAuth token for an MCP server */
-        delete: {
-            parameters: {
-                query?: {
-                    userId?: string;
-                };
-                header?: never;
-                path: {
-                    mcpServerId: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description Token revoked/deleted */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": {
-                            /** @enum {boolean} */
-                            ok: true;
-                        };
-                    };
-                };
-                /** @description No token for this MCP server */
-                404: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["ErrorResponse"];
-                    };
-                };
-            };
-        };
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/mcp-oauth/{mcpServerId}/manual-client": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Register a pre-existing OAuth client (DCR fallback) */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    mcpServerId: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: {
-                content: {
-                    "application/json": {
-                        clientId: string;
-                        clientSecret?: string;
-                        /** Format: uri */
-                        authorizationServerIssuer?: string;
-                        /** Format: uri */
-                        authorizeUrl?: string;
-                        /** Format: uri */
-                        tokenUrl?: string;
-                        /** Format: uri */
-                        revocationUrl?: string;
-                        scopes?: string[];
-                        /** @enum {string} */
-                        tokenEndpointAuthMethod?: "client_secret_basic" | "client_secret_post" | "none";
-                    };
-                };
-            };
-            responses: {
-                /** @description Pending client stored. Call /authorize to start the flow. */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": {
-                            /** @enum {boolean} */
-                            ok: true;
-                        };
-                    };
-                };
-                /** @description Bad input */
-                400: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["ErrorResponse"];
-                    };
-                };
-                /** @description MCP server not found */
-                404: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["ErrorResponse"];
-                    };
-                };
-            };
-        };
-        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -17259,368 +17803,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/mcp-servers": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List MCP servers with optional filters */
-        get: {
-            parameters: {
-                query?: {
-                    scope?: string;
-                    transport?: string;
-                    ownerAgentId?: string;
-                    enabled?: string;
-                    search?: string;
-                };
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description MCP server list */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": {
-                            servers: components["schemas"]["McpServer"][];
-                            total: number;
-                        };
-                    };
-                };
-            };
-        };
-        put?: never;
-        /** Create a new MCP server */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: {
-                content: {
-                    "application/json": {
-                        name: string;
-                        /** @enum {string} */
-                        transport: "stdio" | "http" | "sse";
-                        description?: string;
-                        scope?: string;
-                        ownerAgentId?: string;
-                        command?: string;
-                        args?: string;
-                        url?: string;
-                        headers?: string;
-                        envConfigKeys?: string;
-                        headerConfigKeys?: string;
-                    };
-                };
-            };
-            responses: {
-                /** @description MCP server created */
-                201: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": {
-                            server: components["schemas"]["McpServer"];
-                        };
-                    };
-                };
-                /** @description Validation error */
-                400: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["ErrorResponse"];
-                    };
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/mcp-servers/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get MCP server by ID */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    id: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description MCP server details */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["McpServer"];
-                    };
-                };
-                /** @description MCP server not found */
-                404: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["ErrorResponse"];
-                    };
-                };
-            };
-        };
-        /** Update an MCP server */
-        put: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    id: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: {
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            responses: {
-                /** @description MCP server updated */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": {
-                            server: components["schemas"]["McpServer"];
-                        };
-                    };
-                };
-                /** @description MCP server not found */
-                404: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["ErrorResponse"];
-                    };
-                };
-            };
-        };
-        post?: never;
-        /** Delete an MCP server */
-        delete: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    id: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description MCP server deleted */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": {
-                            success: boolean;
-                            deletedScriptConnectionCount: number;
-                        };
-                    };
-                };
-                /** @description MCP server not found */
-                404: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["ErrorResponse"];
-                    };
-                };
-            };
-        };
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/mcp-servers/{id}/install": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Install MCP server for an agent */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    id: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: {
-                content: {
-                    "application/json": {
-                        agentId: string;
-                    };
-                };
-            };
-            responses: {
-                /** @description MCP server installed */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": {
-                            agentMcpServer: components["schemas"]["AgentMcpServer"];
-                        };
-                    };
-                };
-                /** @description MCP server not found */
-                404: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["ErrorResponse"];
-                    };
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/mcp-servers/{id}/install/{agentId}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /** Uninstall MCP server for an agent */
-        delete: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    id: string;
-                    agentId: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description MCP server uninstalled */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": {
-                            success: boolean;
-                        };
-                    };
-                };
-            };
-        };
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/agents/{id}/mcp-servers": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get all MCP servers installed for an agent */
-        get: {
-            parameters: {
-                query?: {
-                    resolveSecrets?: string;
-                };
-                header?: never;
-                path: {
-                    id: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description Agent MCP servers list */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": {
-                            servers: (components["schemas"]["McpServer"] & {
-                                isActive: boolean;
-                                installedAt: string;
-                                resolvedEnv?: {
-                                    [key: string]: string;
-                                };
-                                resolvedHeaders?: {
-                                    [key: string]: string;
-                                };
-                                authError?: string | null;
-                            })[];
-                            total: number;
-                        };
-                    };
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/logs": {
         parameters: {
             query?: never;
@@ -23899,6 +24081,39 @@ export interface components {
             createdAt: string;
             lastUpdatedAt: string;
         };
+        McpServer: {
+            id: string;
+            name: string;
+            description: string | null;
+            /** @enum {string} */
+            scope: "global" | "swarm" | "agent";
+            ownerAgentId: string | null;
+            /** @enum {string} */
+            transport: "stdio" | "http" | "sse";
+            command: string | null;
+            args: string | null;
+            url: string | null;
+            headers: string | null;
+            envConfigKeys: string | null;
+            headerConfigKeys: string | null;
+            extraAuthorizeParams: string | null;
+            /**
+             * @default static
+             * @enum {string}
+             */
+            authMethod: "static" | "oauth" | "auto";
+            isEnabled: boolean;
+            version: number;
+            createdAt: string;
+            lastUpdatedAt: string;
+        };
+        AgentMcpServer: {
+            id: string;
+            agentId: string;
+            mcpServerId: string;
+            isActive: boolean;
+            installedAt: string;
+        };
         KvEntry: {
             namespace: string;
             key: string;
@@ -24331,39 +24546,6 @@ export interface components {
             callCount: number;
             lastUsedAt: string | null;
             createdAt: string;
-        };
-        McpServer: {
-            id: string;
-            name: string;
-            description: string | null;
-            /** @enum {string} */
-            scope: "global" | "swarm" | "agent";
-            ownerAgentId: string | null;
-            /** @enum {string} */
-            transport: "stdio" | "http" | "sse";
-            command: string | null;
-            args: string | null;
-            url: string | null;
-            headers: string | null;
-            envConfigKeys: string | null;
-            headerConfigKeys: string | null;
-            extraAuthorizeParams: string | null;
-            /**
-             * @default static
-             * @enum {string}
-             */
-            authMethod: "static" | "oauth" | "auto";
-            isEnabled: boolean;
-            version: number;
-            createdAt: string;
-            lastUpdatedAt: string;
-        };
-        AgentMcpServer: {
-            id: string;
-            agentId: string;
-            mcpServerId: string;
-            isActive: boolean;
-            installedAt: string;
         };
         AgentLog: {
             /** Format: uuid */

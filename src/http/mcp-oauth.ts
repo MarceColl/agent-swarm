@@ -782,6 +782,30 @@ export async function completeMcpOAuthCallback(
 
 // ─── Handler ─────────────────────────────────────────────────────────────────
 
+/**
+ * Ask the provider to revoke a stored access token. Best effort: a failed call
+ * is logged and the caller still deletes the local token. Shared by the
+ * disconnect route and the PostHog setup route (region switch).
+ */
+export async function revokeMcpOAuthTokenBestEffort(token: McpOAuthToken): Promise<void> {
+  if (!token.revocationUrl || !token.accessToken) return;
+  try {
+    await revokeMcpToken({
+      revocationUrl: token.revocationUrl,
+      token: token.accessToken,
+      tokenTypeHint: "access_token",
+      clientId: token.dcrClientId ?? "",
+      clientSecret: token.dcrClientSecret ?? undefined,
+      tokenEndpointAuthMethod: authMethodForStoredClient(token.tokenEndpointAuthMethod),
+    });
+  } catch (err) {
+    console.warn(
+      "[mcp-oauth] revocation call failed (continuing with local delete):",
+      err instanceof Error ? err.message : err,
+    );
+  }
+}
+
 export async function handleMcpOAuth(
   req: IncomingMessage,
   res: ServerResponse,
@@ -974,24 +998,7 @@ export async function handleMcpOAuth(
       return true;
     }
 
-    if (token.revocationUrl && token.accessToken) {
-      try {
-        await revokeMcpToken({
-          revocationUrl: token.revocationUrl,
-          token: token.accessToken,
-          tokenTypeHint: "access_token",
-          clientId: token.dcrClientId ?? "",
-          clientSecret: token.dcrClientSecret ?? undefined,
-          tokenEndpointAuthMethod: authMethodForStoredClient(token.tokenEndpointAuthMethod),
-        });
-      } catch (err) {
-        console.warn(
-          "[mcp-oauth] revocation call failed (continuing with local delete):",
-          err instanceof Error ? err.message : err,
-        );
-      }
-    }
-
+    await revokeMcpOAuthTokenBestEffort(token);
     await deleteMcpOAuthToken(parsed.params.mcpServerId, userId);
     // Flip back to static so resolveSecrets stops trying to inject Bearer.
     await setMcpServerAuthMethod(parsed.params.mcpServerId, "static");

@@ -2268,6 +2268,154 @@
           "lastUpdatedAt"
         ]
       },
+      "McpServer": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "global",
+              "swarm",
+              "agent"
+            ]
+          },
+          "ownerAgentId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "transport": {
+            "type": "string",
+            "enum": [
+              "stdio",
+              "http",
+              "sse"
+            ]
+          },
+          "command": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "args": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "headers": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "envConfigKeys": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "headerConfigKeys": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "extraAuthorizeParams": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "authMethod": {
+            "type": "string",
+            "enum": [
+              "static",
+              "oauth",
+              "auto"
+            ],
+            "default": "static"
+          },
+          "isEnabled": {
+            "type": "boolean"
+          },
+          "version": {
+            "type": "number"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "lastUpdatedAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "description",
+          "scope",
+          "ownerAgentId",
+          "transport",
+          "command",
+          "args",
+          "url",
+          "headers",
+          "envConfigKeys",
+          "headerConfigKeys",
+          "extraAuthorizeParams",
+          "isEnabled",
+          "version",
+          "createdAt",
+          "lastUpdatedAt"
+        ]
+      },
+      "AgentMcpServer": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "agentId": {
+            "type": "string"
+          },
+          "mcpServerId": {
+            "type": "string"
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "installedAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "agentId",
+          "mcpServerId",
+          "isActive",
+          "installedAt"
+        ]
+      },
       "KvEntry": {
         "type": "object",
         "properties": {
@@ -4037,154 +4185,6 @@
           "callCount",
           "lastUsedAt",
           "createdAt"
-        ]
-      },
-      "McpServer": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "description": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "scope": {
-            "type": "string",
-            "enum": [
-              "global",
-              "swarm",
-              "agent"
-            ]
-          },
-          "ownerAgentId": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "transport": {
-            "type": "string",
-            "enum": [
-              "stdio",
-              "http",
-              "sse"
-            ]
-          },
-          "command": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "args": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "url": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "headers": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "envConfigKeys": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "headerConfigKeys": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "extraAuthorizeParams": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "authMethod": {
-            "type": "string",
-            "enum": [
-              "static",
-              "oauth",
-              "auto"
-            ],
-            "default": "static"
-          },
-          "isEnabled": {
-            "type": "boolean"
-          },
-          "version": {
-            "type": "number"
-          },
-          "createdAt": {
-            "type": "string"
-          },
-          "lastUpdatedAt": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "name",
-          "description",
-          "scope",
-          "ownerAgentId",
-          "transport",
-          "command",
-          "args",
-          "url",
-          "headers",
-          "envConfigKeys",
-          "headerConfigKeys",
-          "extraAuthorizeParams",
-          "isEnabled",
-          "version",
-          "createdAt",
-          "lastUpdatedAt"
-        ]
-      },
-      "AgentMcpServer": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "agentId": {
-            "type": "string"
-          },
-          "mcpServerId": {
-            "type": "string"
-          },
-          "isActive": {
-            "type": "boolean"
-          },
-          "installedAt": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "agentId",
-          "mcpServerId",
-          "isActive",
-          "installedAt"
         ]
       },
       "AgentLog": {
@@ -20408,6 +20408,1356 @@
         }
       }
     },
+    "/api/mcp-oauth/{mcpServerId}/metadata": {
+      "get": {
+        "summary": "Probe OAuth metadata (PRMD + AS) for an MCP server",
+        "tags": [
+          "MCP OAuth"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "mcpServerId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OAuth metadata or { requiresOAuth: false }",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "requiresOAuth": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        }
+                      },
+                      "required": [
+                        "requiresOAuth"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "resourceUrl": {
+                          "type": "string"
+                        },
+                        "authorizationServerIssuer": {
+                          "type": "string"
+                        },
+                        "authorizeUrl": {
+                          "type": "string"
+                        },
+                        "tokenUrl": {
+                          "type": "string"
+                        },
+                        "revocationUrl": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "registrationEndpoint": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "scopes": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "requiresOAuth": {
+                          "type": "boolean",
+                          "enum": [
+                            true
+                          ]
+                        },
+                        "dcrSupported": {
+                          "type": "boolean"
+                        },
+                        "bearerMethodsSupported": {
+                          "type": [
+                            "array",
+                            "null"
+                          ],
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "tokenEndpointAuthMethodsSupported": {
+                          "type": [
+                            "array",
+                            "null"
+                          ],
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "required": [
+                        "resourceUrl",
+                        "authorizationServerIssuer",
+                        "authorizeUrl",
+                        "tokenUrl",
+                        "revocationUrl",
+                        "registrationEndpoint",
+                        "scopes",
+                        "requiresOAuth",
+                        "dcrSupported",
+                        "bearerMethodsSupported",
+                        "tokenEndpointAuthMethodsSupported"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "MCP has no URL / invalid transport",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "MCP server not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mcp-oauth/{mcpServerId}/status": {
+      "get": {
+        "summary": "Get the current OAuth connection status for an MCP server",
+        "tags": [
+          "MCP OAuth"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "mcpServerId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "userId",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Token status (never includes the token value itself)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "mcpServerId": {
+                      "type": "string"
+                    },
+                    "authMethod": {
+                      "type": "string",
+                      "enum": [
+                        "static",
+                        "oauth",
+                        "auto"
+                      ]
+                    },
+                    "connected": {
+                      "type": "boolean"
+                    },
+                    "token": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "connected",
+                            "expired",
+                            "error",
+                            "revoked"
+                          ]
+                        },
+                        "tokenType": {
+                          "type": "string"
+                        },
+                        "expiresAt": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "scope": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "lastErrorMessage": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "lastRefreshedAt": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "authorizationServerIssuer": {
+                          "type": "string"
+                        },
+                        "resourceUrl": {
+                          "type": "string"
+                        },
+                        "clientSource": {
+                          "type": "string",
+                          "enum": [
+                            "dcr",
+                            "manual",
+                            "preregistered"
+                          ]
+                        },
+                        "hasRefreshToken": {
+                          "type": "boolean"
+                        },
+                        "createdAt": {
+                          "type": "string"
+                        },
+                        "updatedAt": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "status",
+                        "tokenType",
+                        "expiresAt",
+                        "scope",
+                        "lastErrorMessage",
+                        "lastRefreshedAt",
+                        "authorizationServerIssuer",
+                        "resourceUrl",
+                        "clientSource",
+                        "hasRefreshToken",
+                        "createdAt",
+                        "updatedAt"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "mcpServerId",
+                    "authMethod",
+                    "connected",
+                    "token"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "MCP server not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mcp-oauth/{mcpServerId}/authorize": {
+      "get": {
+        "summary": "Start an OAuth flow. Redirects to the provider.",
+        "tags": [
+          "MCP OAuth"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "mcpServerId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "redirect",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "userId",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "scopes",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "302": {
+            "description": "Redirect to authorization server"
+          },
+          "400": {
+            "description": "MCP has no URL / does not require OAuth",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "MCP server not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mcp-oauth/{mcpServerId}/authorize-url": {
+      "get": {
+        "summary": "Build an OAuth authorize URL. Returns JSON so the browser can navigate without losing the Bearer auth header.",
+        "tags": [
+          "MCP OAuth"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "mcpServerId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "redirect",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "userId",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "scopes",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "{ providerUrl: string }",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "providerUrl": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "providerUrl"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "MCP has no URL / does not require OAuth",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "MCP server not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mcp-oauth/callback": {
+      "get": {
+        "summary": "OAuth redirect target. Exchanges code -> tokens and redirects back to dashboard.",
+        "tags": [
+          "MCP OAuth"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "code",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "state",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "error",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "error_description",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "302": {
+            "description": "Redirect back to dashboard with oauth=success or oauth=error"
+          },
+          "400": {
+            "description": "Bad state / missing code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mcp-oauth/{mcpServerId}/refresh": {
+      "post": {
+        "summary": "Force-refresh the access token for an MCP server",
+        "tags": [
+          "MCP OAuth"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "mcpServerId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "userId": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Refreshed token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "expiresAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "scope": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "expiresAt",
+                    "scope"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No token for this MCP server",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Refresh failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mcp-oauth/{mcpServerId}": {
+      "delete": {
+        "summary": "Revoke and delete the OAuth token for an MCP server",
+        "tags": [
+          "MCP OAuth"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "mcpServerId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "userId",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Token revoked/deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No token for this MCP server",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mcp-oauth/{mcpServerId}/manual-client": {
+      "post": {
+        "summary": "Register a pre-existing OAuth client (DCR fallback)",
+        "tags": [
+          "MCP OAuth"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "mcpServerId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "clientId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "clientSecret": {
+                    "type": "string"
+                  },
+                  "authorizationServerIssuer": {
+                    "type": "string",
+                    "format": "uri"
+                  },
+                  "authorizeUrl": {
+                    "type": "string",
+                    "format": "uri"
+                  },
+                  "tokenUrl": {
+                    "type": "string",
+                    "format": "uri"
+                  },
+                  "revocationUrl": {
+                    "type": "string",
+                    "format": "uri"
+                  },
+                  "scopes": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "tokenEndpointAuthMethod": {
+                    "type": "string",
+                    "enum": [
+                      "client_secret_basic",
+                      "client_secret_post",
+                      "none"
+                    ]
+                  }
+                },
+                "required": [
+                  "clientId"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Pending client stored. Call /authorize to start the flow.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad input",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "MCP server not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mcp-servers": {
+      "get": {
+        "summary": "List MCP servers with optional filters",
+        "tags": [
+          "MCP Servers"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "scope",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "transport",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "ownerAgentId",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "enabled",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "search",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "MCP server list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "servers": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/McpServer"
+                      }
+                    },
+                    "total": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "servers",
+                    "total"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create a new MCP server",
+        "tags": [
+          "MCP Servers"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "transport": {
+                    "type": "string",
+                    "enum": [
+                      "stdio",
+                      "http",
+                      "sse"
+                    ]
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "scope": {
+                    "type": "string"
+                  },
+                  "ownerAgentId": {
+                    "type": "string"
+                  },
+                  "command": {
+                    "type": "string"
+                  },
+                  "args": {
+                    "type": "string"
+                  },
+                  "url": {
+                    "type": "string"
+                  },
+                  "headers": {
+                    "type": "string"
+                  },
+                  "envConfigKeys": {
+                    "type": "string"
+                  },
+                  "headerConfigKeys": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name",
+                  "transport"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "MCP server created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "server": {
+                      "$ref": "#/components/schemas/McpServer"
+                    }
+                  },
+                  "required": [
+                    "server"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mcp-servers/{id}": {
+      "get": {
+        "summary": "Get MCP server by ID",
+        "tags": [
+          "MCP Servers"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "MCP server details",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/McpServer"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "MCP server not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "summary": "Update an MCP server",
+        "tags": [
+          "MCP Servers"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": {}
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "MCP server updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "server": {
+                      "$ref": "#/components/schemas/McpServer"
+                    }
+                  },
+                  "required": [
+                    "server"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "MCP server not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete an MCP server",
+        "tags": [
+          "MCP Servers"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "MCP server deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "deletedScriptConnectionCount": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "deletedScriptConnectionCount"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "MCP server not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mcp-servers/{id}/install": {
+      "post": {
+        "summary": "Install MCP server for an agent",
+        "tags": [
+          "MCP Servers"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "agentId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "agentId"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "MCP server installed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "agentMcpServer": {
+                      "$ref": "#/components/schemas/AgentMcpServer"
+                    }
+                  },
+                  "required": [
+                    "agentMcpServer"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "MCP server not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mcp-servers/{id}/install/{agentId}": {
+      "delete": {
+        "summary": "Uninstall MCP server for an agent",
+        "tags": [
+          "MCP Servers"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "agentId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "MCP server uninstalled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "success"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agents/{id}/mcp-servers": {
+      "get": {
+        "summary": "Get all MCP servers installed for an agent",
+        "tags": [
+          "MCP Servers"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "resolveSecrets",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Agent MCP servers list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "servers": {
+                      "type": "array",
+                      "items": {
+                        "allOf": [
+                          {
+                            "$ref": "#/components/schemas/McpServer"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "isActive": {
+                                "type": "boolean"
+                              },
+                              "installedAt": {
+                                "type": "string"
+                              },
+                              "resolvedEnv": {
+                                "type": "object",
+                                "additionalProperties": {
+                                  "type": "string"
+                                }
+                              },
+                              "resolvedHeaders": {
+                                "type": "object",
+                                "additionalProperties": {
+                                  "type": "string"
+                                }
+                              },
+                              "authError": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "isActive",
+                              "installedAt"
+                            ]
+                          }
+                        ]
+                      }
+                    },
+                    "total": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "servers",
+                    "total"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/integrations/claude-managed/test": {
       "post": {
         "summary": "Test the claude-managed integration: resolves ANTHROPIC_API_KEY + MANAGED_AGENT_ID from swarm_config and calls beta.agents.retrieve.",
@@ -20556,6 +21906,371 @@
                 "schema": {
                   "type": "object",
                   "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/integrations/posthog": {
+      "get": {
+        "summary": "Get the PostHog integration state (MCP row, pinning, OAuth status, installs).",
+        "tags": [
+          "Integrations"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "PostHog integration state. Defaults (`mcpServerId: null`, region `us`, read-only, `oauthStatus: none`) when it is not set up.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "mcpServerId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "region": {
+                      "type": "string",
+                      "enum": [
+                        "us",
+                        "eu"
+                      ]
+                    },
+                    "readOnly": {
+                      "type": "boolean"
+                    },
+                    "projectId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "organizationId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "features": {
+                      "type": [
+                        "array",
+                        "null"
+                      ],
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "oauthStatus": {
+                      "type": "string",
+                      "enum": [
+                        "none",
+                        "connected",
+                        "expired",
+                        "error",
+                        "revoked"
+                      ]
+                    },
+                    "lastErrorMessage": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "installedAgentIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "mcpServerId",
+                    "region",
+                    "readOnly",
+                    "projectId",
+                    "organizationId",
+                    "features",
+                    "oauthStatus",
+                    "lastErrorMessage",
+                    "installedAgentIds"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "summary": "Create or update the global PostHog MCP server (region, read-only, pinned project/org, features) and diff its agent installs.",
+        "tags": [
+          "Integrations"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "region": {
+                    "type": "string",
+                    "enum": [
+                      "us",
+                      "eu"
+                    ]
+                  },
+                  "readOnly": {
+                    "type": "boolean"
+                  },
+                  "projectId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^[A-Za-z0-9_-]{1,128}$"
+                  },
+                  "organizationId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^[A-Za-z0-9_-]{1,128}$"
+                  },
+                  "features": {
+                    "type": [
+                      "array",
+                      "null"
+                    ],
+                    "items": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]{1,128}$"
+                    }
+                  },
+                  "agentIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  }
+                },
+                "required": [
+                  "region",
+                  "readOnly"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated PostHog integration state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "mcpServerId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "region": {
+                      "type": "string",
+                      "enum": [
+                        "us",
+                        "eu"
+                      ]
+                    },
+                    "readOnly": {
+                      "type": "boolean"
+                    },
+                    "projectId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "organizationId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "features": {
+                      "type": [
+                        "array",
+                        "null"
+                      ],
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "oauthStatus": {
+                      "type": "string",
+                      "enum": [
+                        "none",
+                        "connected",
+                        "expired",
+                        "error",
+                        "revoked"
+                      ]
+                    },
+                    "lastErrorMessage": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "installedAgentIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "mcpServerId",
+                    "region",
+                    "readOnly",
+                    "projectId",
+                    "organizationId",
+                    "features",
+                    "oauthStatus",
+                    "lastErrorMessage",
+                    "installedAgentIds"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error or unknown agent",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Missing MCP server create/update/install permission",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/integrations/posthog/projects": {
+      "get": {
+        "summary": "List the PostHog organizations and projects the connected account can access.",
+        "tags": [
+          "Integrations"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Organizations with their projects",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "organizations": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "projects": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "name": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "name"
+                              ]
+                            }
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "projects"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "organizations"
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Missing MCP server update permission",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "PostHog is not set up or not connected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "PostHog MCP call failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -25571,802 +27286,6 @@
           },
           "400": {
             "description": "Validation error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/mcp-oauth/{mcpServerId}/metadata": {
-      "get": {
-        "summary": "Probe OAuth metadata (PRMD + AS) for an MCP server",
-        "tags": [
-          "MCP OAuth"
-        ],
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "schema": {
-              "type": "string"
-            },
-            "required": true,
-            "name": "mcpServerId",
-            "in": "path"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OAuth metadata or { requiresOAuth: false }",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "anyOf": [
-                    {
-                      "type": "object",
-                      "properties": {
-                        "requiresOAuth": {
-                          "type": "boolean",
-                          "enum": [
-                            false
-                          ]
-                        }
-                      },
-                      "required": [
-                        "requiresOAuth"
-                      ]
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "resourceUrl": {
-                          "type": "string"
-                        },
-                        "authorizationServerIssuer": {
-                          "type": "string"
-                        },
-                        "authorizeUrl": {
-                          "type": "string"
-                        },
-                        "tokenUrl": {
-                          "type": "string"
-                        },
-                        "revocationUrl": {
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        },
-                        "registrationEndpoint": {
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        },
-                        "scopes": {
-                          "type": "array",
-                          "items": {
-                            "type": "string"
-                          }
-                        },
-                        "requiresOAuth": {
-                          "type": "boolean",
-                          "enum": [
-                            true
-                          ]
-                        },
-                        "dcrSupported": {
-                          "type": "boolean"
-                        },
-                        "bearerMethodsSupported": {
-                          "type": [
-                            "array",
-                            "null"
-                          ],
-                          "items": {
-                            "type": "string"
-                          }
-                        },
-                        "tokenEndpointAuthMethodsSupported": {
-                          "type": [
-                            "array",
-                            "null"
-                          ],
-                          "items": {
-                            "type": "string"
-                          }
-                        }
-                      },
-                      "required": [
-                        "resourceUrl",
-                        "authorizationServerIssuer",
-                        "authorizeUrl",
-                        "tokenUrl",
-                        "revocationUrl",
-                        "registrationEndpoint",
-                        "scopes",
-                        "requiresOAuth",
-                        "dcrSupported",
-                        "bearerMethodsSupported",
-                        "tokenEndpointAuthMethodsSupported"
-                      ]
-                    }
-                  ]
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "MCP has no URL / invalid transport",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "MCP server not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/mcp-oauth/{mcpServerId}/status": {
-      "get": {
-        "summary": "Get the current OAuth connection status for an MCP server",
-        "tags": [
-          "MCP OAuth"
-        ],
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "schema": {
-              "type": "string"
-            },
-            "required": true,
-            "name": "mcpServerId",
-            "in": "path"
-          },
-          {
-            "schema": {
-              "type": "string"
-            },
-            "required": false,
-            "name": "userId",
-            "in": "query"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Token status (never includes the token value itself)",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "mcpServerId": {
-                      "type": "string"
-                    },
-                    "authMethod": {
-                      "type": "string",
-                      "enum": [
-                        "static",
-                        "oauth",
-                        "auto"
-                      ]
-                    },
-                    "connected": {
-                      "type": "boolean"
-                    },
-                    "token": {
-                      "type": [
-                        "object",
-                        "null"
-                      ],
-                      "properties": {
-                        "id": {
-                          "type": "string"
-                        },
-                        "status": {
-                          "type": "string",
-                          "enum": [
-                            "connected",
-                            "expired",
-                            "error",
-                            "revoked"
-                          ]
-                        },
-                        "tokenType": {
-                          "type": "string"
-                        },
-                        "expiresAt": {
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        },
-                        "scope": {
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        },
-                        "lastErrorMessage": {
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        },
-                        "lastRefreshedAt": {
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        },
-                        "authorizationServerIssuer": {
-                          "type": "string"
-                        },
-                        "resourceUrl": {
-                          "type": "string"
-                        },
-                        "clientSource": {
-                          "type": "string",
-                          "enum": [
-                            "dcr",
-                            "manual",
-                            "preregistered"
-                          ]
-                        },
-                        "hasRefreshToken": {
-                          "type": "boolean"
-                        },
-                        "createdAt": {
-                          "type": "string"
-                        },
-                        "updatedAt": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "id",
-                        "status",
-                        "tokenType",
-                        "expiresAt",
-                        "scope",
-                        "lastErrorMessage",
-                        "lastRefreshedAt",
-                        "authorizationServerIssuer",
-                        "resourceUrl",
-                        "clientSource",
-                        "hasRefreshToken",
-                        "createdAt",
-                        "updatedAt"
-                      ]
-                    }
-                  },
-                  "required": [
-                    "mcpServerId",
-                    "authMethod",
-                    "connected",
-                    "token"
-                  ]
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "MCP server not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/mcp-oauth/{mcpServerId}/authorize": {
-      "get": {
-        "summary": "Start an OAuth flow. Redirects to the provider.",
-        "tags": [
-          "MCP OAuth"
-        ],
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "schema": {
-              "type": "string"
-            },
-            "required": true,
-            "name": "mcpServerId",
-            "in": "path"
-          },
-          {
-            "schema": {
-              "type": "string"
-            },
-            "required": false,
-            "name": "redirect",
-            "in": "query"
-          },
-          {
-            "schema": {
-              "type": "string"
-            },
-            "required": false,
-            "name": "userId",
-            "in": "query"
-          },
-          {
-            "schema": {
-              "type": "string"
-            },
-            "required": false,
-            "name": "scopes",
-            "in": "query"
-          }
-        ],
-        "responses": {
-          "302": {
-            "description": "Redirect to authorization server"
-          },
-          "400": {
-            "description": "MCP has no URL / does not require OAuth",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "MCP server not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/mcp-oauth/{mcpServerId}/authorize-url": {
-      "get": {
-        "summary": "Build an OAuth authorize URL. Returns JSON so the browser can navigate without losing the Bearer auth header.",
-        "tags": [
-          "MCP OAuth"
-        ],
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "schema": {
-              "type": "string"
-            },
-            "required": true,
-            "name": "mcpServerId",
-            "in": "path"
-          },
-          {
-            "schema": {
-              "type": "string"
-            },
-            "required": false,
-            "name": "redirect",
-            "in": "query"
-          },
-          {
-            "schema": {
-              "type": "string"
-            },
-            "required": false,
-            "name": "userId",
-            "in": "query"
-          },
-          {
-            "schema": {
-              "type": "string"
-            },
-            "required": false,
-            "name": "scopes",
-            "in": "query"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "{ providerUrl: string }",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "providerUrl": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "providerUrl"
-                  ]
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "MCP has no URL / does not require OAuth",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "MCP server not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/mcp-oauth/callback": {
-      "get": {
-        "summary": "OAuth redirect target. Exchanges code -> tokens and redirects back to dashboard.",
-        "tags": [
-          "MCP OAuth"
-        ],
-        "parameters": [
-          {
-            "schema": {
-              "type": "string"
-            },
-            "required": false,
-            "name": "code",
-            "in": "query"
-          },
-          {
-            "schema": {
-              "type": "string"
-            },
-            "required": false,
-            "name": "state",
-            "in": "query"
-          },
-          {
-            "schema": {
-              "type": "string"
-            },
-            "required": false,
-            "name": "error",
-            "in": "query"
-          },
-          {
-            "schema": {
-              "type": "string"
-            },
-            "required": false,
-            "name": "error_description",
-            "in": "query"
-          }
-        ],
-        "responses": {
-          "302": {
-            "description": "Redirect back to dashboard with oauth=success or oauth=error"
-          },
-          "400": {
-            "description": "Bad state / missing code",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/mcp-oauth/{mcpServerId}/refresh": {
-      "post": {
-        "summary": "Force-refresh the access token for an MCP server",
-        "tags": [
-          "MCP OAuth"
-        ],
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "schema": {
-              "type": "string"
-            },
-            "required": true,
-            "name": "mcpServerId",
-            "in": "path"
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "userId": {
-                    "type": "string"
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Refreshed token",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "ok": {
-                      "type": "boolean",
-                      "enum": [
-                        true
-                      ]
-                    },
-                    "expiresAt": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
-                    },
-                    "scope": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
-                    }
-                  },
-                  "required": [
-                    "ok",
-                    "expiresAt",
-                    "scope"
-                  ]
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "No token for this MCP server",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Refresh failed",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/mcp-oauth/{mcpServerId}": {
-      "delete": {
-        "summary": "Revoke and delete the OAuth token for an MCP server",
-        "tags": [
-          "MCP OAuth"
-        ],
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "schema": {
-              "type": "string"
-            },
-            "required": true,
-            "name": "mcpServerId",
-            "in": "path"
-          },
-          {
-            "schema": {
-              "type": "string"
-            },
-            "required": false,
-            "name": "userId",
-            "in": "query"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Token revoked/deleted",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "ok": {
-                      "type": "boolean",
-                      "enum": [
-                        true
-                      ]
-                    }
-                  },
-                  "required": [
-                    "ok"
-                  ]
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "No token for this MCP server",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/mcp-oauth/{mcpServerId}/manual-client": {
-      "post": {
-        "summary": "Register a pre-existing OAuth client (DCR fallback)",
-        "tags": [
-          "MCP OAuth"
-        ],
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "schema": {
-              "type": "string"
-            },
-            "required": true,
-            "name": "mcpServerId",
-            "in": "path"
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "clientId": {
-                    "type": "string",
-                    "minLength": 1
-                  },
-                  "clientSecret": {
-                    "type": "string"
-                  },
-                  "authorizationServerIssuer": {
-                    "type": "string",
-                    "format": "uri"
-                  },
-                  "authorizeUrl": {
-                    "type": "string",
-                    "format": "uri"
-                  },
-                  "tokenUrl": {
-                    "type": "string",
-                    "format": "uri"
-                  },
-                  "revocationUrl": {
-                    "type": "string",
-                    "format": "uri"
-                  },
-                  "scopes": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    }
-                  },
-                  "tokenEndpointAuthMethod": {
-                    "type": "string",
-                    "enum": [
-                      "client_secret_basic",
-                      "client_secret_post",
-                      "none"
-                    ]
-                  }
-                },
-                "required": [
-                  "clientId"
-                ]
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Pending client stored. Call /authorize to start the flow.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "ok": {
-                      "type": "boolean",
-                      "enum": [
-                        true
-                      ]
-                    }
-                  },
-                  "required": [
-                    "ok"
-                  ]
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Bad input",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "MCP server not found",
             "content": {
               "application/json": {
                 "schema": {
@@ -45648,560 +46567,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/mcp-servers": {
-      "get": {
-        "summary": "List MCP servers with optional filters",
-        "tags": [
-          "MCP Servers"
-        ],
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "schema": {
-              "type": "string"
-            },
-            "required": false,
-            "name": "scope",
-            "in": "query"
-          },
-          {
-            "schema": {
-              "type": "string"
-            },
-            "required": false,
-            "name": "transport",
-            "in": "query"
-          },
-          {
-            "schema": {
-              "type": "string"
-            },
-            "required": false,
-            "name": "ownerAgentId",
-            "in": "query"
-          },
-          {
-            "schema": {
-              "type": "string"
-            },
-            "required": false,
-            "name": "enabled",
-            "in": "query"
-          },
-          {
-            "schema": {
-              "type": "string"
-            },
-            "required": false,
-            "name": "search",
-            "in": "query"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "MCP server list",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "servers": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/components/schemas/McpServer"
-                      }
-                    },
-                    "total": {
-                      "type": "number"
-                    }
-                  },
-                  "required": [
-                    "servers",
-                    "total"
-                  ]
-                }
-              }
-            }
-          }
-        }
-      },
-      "post": {
-        "summary": "Create a new MCP server",
-        "tags": [
-          "MCP Servers"
-        ],
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "name": {
-                    "type": "string",
-                    "minLength": 1
-                  },
-                  "transport": {
-                    "type": "string",
-                    "enum": [
-                      "stdio",
-                      "http",
-                      "sse"
-                    ]
-                  },
-                  "description": {
-                    "type": "string"
-                  },
-                  "scope": {
-                    "type": "string"
-                  },
-                  "ownerAgentId": {
-                    "type": "string"
-                  },
-                  "command": {
-                    "type": "string"
-                  },
-                  "args": {
-                    "type": "string"
-                  },
-                  "url": {
-                    "type": "string"
-                  },
-                  "headers": {
-                    "type": "string"
-                  },
-                  "envConfigKeys": {
-                    "type": "string"
-                  },
-                  "headerConfigKeys": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "name",
-                  "transport"
-                ]
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "MCP server created",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "server": {
-                      "$ref": "#/components/schemas/McpServer"
-                    }
-                  },
-                  "required": [
-                    "server"
-                  ]
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Validation error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/mcp-servers/{id}": {
-      "get": {
-        "summary": "Get MCP server by ID",
-        "tags": [
-          "MCP Servers"
-        ],
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "schema": {
-              "type": "string"
-            },
-            "required": true,
-            "name": "id",
-            "in": "path"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "MCP server details",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/McpServer"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "MCP server not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      },
-      "put": {
-        "summary": "Update an MCP server",
-        "tags": [
-          "MCP Servers"
-        ],
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "schema": {
-              "type": "string"
-            },
-            "required": true,
-            "name": "id",
-            "in": "path"
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "additionalProperties": {}
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "MCP server updated",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "server": {
-                      "$ref": "#/components/schemas/McpServer"
-                    }
-                  },
-                  "required": [
-                    "server"
-                  ]
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "MCP server not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      },
-      "delete": {
-        "summary": "Delete an MCP server",
-        "tags": [
-          "MCP Servers"
-        ],
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "schema": {
-              "type": "string"
-            },
-            "required": true,
-            "name": "id",
-            "in": "path"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "MCP server deleted",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "success": {
-                      "type": "boolean"
-                    },
-                    "deletedScriptConnectionCount": {
-                      "type": "number"
-                    }
-                  },
-                  "required": [
-                    "success",
-                    "deletedScriptConnectionCount"
-                  ]
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "MCP server not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/mcp-servers/{id}/install": {
-      "post": {
-        "summary": "Install MCP server for an agent",
-        "tags": [
-          "MCP Servers"
-        ],
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "schema": {
-              "type": "string"
-            },
-            "required": true,
-            "name": "id",
-            "in": "path"
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "agentId": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "agentId"
-                ]
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "MCP server installed",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "agentMcpServer": {
-                      "$ref": "#/components/schemas/AgentMcpServer"
-                    }
-                  },
-                  "required": [
-                    "agentMcpServer"
-                  ]
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "MCP server not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/mcp-servers/{id}/install/{agentId}": {
-      "delete": {
-        "summary": "Uninstall MCP server for an agent",
-        "tags": [
-          "MCP Servers"
-        ],
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "schema": {
-              "type": "string"
-            },
-            "required": true,
-            "name": "id",
-            "in": "path"
-          },
-          {
-            "schema": {
-              "type": "string"
-            },
-            "required": true,
-            "name": "agentId",
-            "in": "path"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "MCP server uninstalled",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "success": {
-                      "type": "boolean"
-                    }
-                  },
-                  "required": [
-                    "success"
-                  ]
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/agents/{id}/mcp-servers": {
-      "get": {
-        "summary": "Get all MCP servers installed for an agent",
-        "tags": [
-          "MCP Servers"
-        ],
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "schema": {
-              "type": "string"
-            },
-            "required": true,
-            "name": "id",
-            "in": "path"
-          },
-          {
-            "schema": {
-              "type": "string"
-            },
-            "required": false,
-            "name": "resolveSecrets",
-            "in": "query"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Agent MCP servers list",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "servers": {
-                      "type": "array",
-                      "items": {
-                        "allOf": [
-                          {
-                            "$ref": "#/components/schemas/McpServer"
-                          },
-                          {
-                            "type": "object",
-                            "properties": {
-                              "isActive": {
-                                "type": "boolean"
-                              },
-                              "installedAt": {
-                                "type": "string"
-                              },
-                              "resolvedEnv": {
-                                "type": "object",
-                                "additionalProperties": {
-                                  "type": "string"
-                                }
-                              },
-                              "resolvedHeaders": {
-                                "type": "object",
-                                "additionalProperties": {
-                                  "type": "string"
-                                }
-                              },
-                              "authError": {
-                                "type": [
-                                  "string",
-                                  "null"
-                                ]
-                              }
-                            },
-                            "required": [
-                              "isActive",
-                              "installedAt"
-                            ]
-                          }
-                        ]
-                      }
-                    },
-                    "total": {
-                      "type": "number"
-                    }
-                  },
-                  "required": [
-                    "servers",
-                    "total"
-                  ]
                 }
               }
             }

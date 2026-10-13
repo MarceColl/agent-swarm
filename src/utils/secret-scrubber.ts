@@ -35,9 +35,10 @@ import { GITLEAKS_RULES } from "./secret-rules.generated";
  * 5, the vendored gitleaks rule set, plus hand-written Resend, Google OAuth,
  * Discord webhook, xAI and bare Telegram shapes in pass 2; v6 = pass 5 resumes
  * after the secret, not the match, so adjacent secrets that share a delimiter
- * both redact, and sourcegraph-access-token drops its bare 40-hex branch.
+ * both redact, and sourcegraph-access-token drops its bare 40-hex branch;
+ * v7 = PostHog phx_/pha_/phr_ token shapes in pass 2.
  */
-export const SCRUBBER_RULES_VERSION = 6;
+export const SCRUBBER_RULES_VERSION = 7;
 
 /** Env-var names that are always considered secrets, even without suffix hints. */
 const SENSITIVE_KEY_EXACT = new Set<string>([
@@ -530,6 +531,12 @@ const TOKEN_REGEXES: ReadonlyArray<{ name: string; re: RegExp }> = [
     re: new RegExp(String.raw`${TB}lin_oauth_[A-Za-z0-9_-]{10,}(?!\w)`, "g"),
   },
   { name: "linear_api", re: new RegExp(String.raw`${TB}lin_api_[A-Za-z0-9_-]{10,}(?!\w)`, "g") },
+  // PostHog personal API keys (phx_), OAuth access (pha_) and refresh (phr_)
+  // tokens. phc_ project keys are public by design and stay readable.
+  {
+    name: "posthog_token",
+    re: new RegExp(String.raw`${TB}ph[xar]_[A-Za-z0-9_-]{20,}(?!\w)`, "g"),
+  },
   // npm tokens
   { name: "npm_token", re: new RegExp(String.raw`${TB}npm_[A-Za-z0-9_-]{20,}(?!\w)`, "g") },
   // Jira API tokens (Atlassian cloud)

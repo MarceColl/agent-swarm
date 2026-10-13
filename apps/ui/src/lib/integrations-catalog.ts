@@ -57,7 +57,8 @@ export type IntegrationSpecialFlow =
   | "jira-oauth"
   | "codex-cli"
   | "claude-managed-cli"
-  | "memory-embeddings";
+  | "memory-embeddings"
+  | "posthog-mcp";
 
 /** Which agent role(s) the swarm needs to have a given skill installed on. */
 export type AgentRole = "lead" | "worker";
@@ -627,6 +628,33 @@ export const INTEGRATIONS: IntegrationDef[] = [
         helpText: "Your Sentry organization slug (from the Sentry URL).",
       },
     ],
+  },
+
+  // -------------------------------------------------------------- PostHog
+  {
+    id: "posthog",
+    name: "PostHog",
+    description:
+      "Let agents query PostHog analytics, insights, flags, and errors through its hosted MCP server. Uses OAuth.",
+    category: "observability",
+    iconKey: "chart-line",
+    logoSrc: "/provider-logos/posthog.svg",
+    docsUrl: "https://docs.agent-swarm.dev/docs/integrations/posthog",
+    restartRequired: false,
+    specialFlow: "posthog-mcp",
+    recommendedSkills: [
+      {
+        name: "posthog-interaction",
+        source: "template",
+        templateRepo: "desplega-ai/agent-swarm",
+        templatePath: "templates/skills/posthog-interaction",
+        roles: ["lead", "worker"],
+        reason:
+          "Canonical recipes for the PostHog MCP tools: schema discovery before HogQL, bounded execute-sql queries, saved insights, and the read-only and AI-billed tool rules.",
+        installOnSetup: true,
+      },
+    ],
+    fields: [],
   },
 
   // ------------------------------------------------------------ AgentMail

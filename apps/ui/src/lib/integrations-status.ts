@@ -16,9 +16,24 @@ import {
   type IntegrationConfigGroup,
   type IntegrationDef,
   type IntegrationField,
+  type IntegrationSpecialFlow,
 } from "./integrations-catalog";
 
 export type IntegrationStatus = "configured" | "partial" | "disabled" | "none";
+
+/**
+ * Live status for special flows whose state is not in `swarm_config` (for
+ * example an MCP OAuth connection). A flow with an entry here takes its
+ * status from it instead of field presence. Flows without one are unaffected.
+ */
+export type FlowStatuses = Partial<Record<IntegrationSpecialFlow, IntegrationStatus>>;
+
+/** Card status of an MCP OAuth connection: connected, broken, or absent. */
+export function mcpOAuthIntegrationStatus(oauthStatus: string): IntegrationStatus {
+  if (oauthStatus === "connected") return "configured";
+  if (oauthStatus === "expired" || oauthStatus === "error") return "partial";
+  return "none";
+}
 
 /**
  * Map of env-var key → whether it's set in the API server's `process.env`.
@@ -68,6 +83,7 @@ export function deriveIntegrationStatus(
   def: IntegrationDef,
   configs: SwarmConfig[],
   envPresence: EnvPresence = {},
+  flowStatuses: FlowStatuses = {},
 ): IntegrationStatus {
   // Disabled signal: only derivable from DB rows (env-presence is boolean-only,
   // so we can't tell <PREFIX>_DISABLE=true from =false when set via deploy env).
@@ -77,6 +93,9 @@ export function deriveIntegrationStatus(
       return "disabled";
     }
   }
+
+  const flowStatus = def.specialFlow ? flowStatuses[def.specialFlow] : undefined;
+  if (flowStatus) return flowStatus;
 
   if (def.id === "slack") {
     const configuredMode = findConfigForKey(configs, "SLACK_MODE")?.value.trim();

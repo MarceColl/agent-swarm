@@ -39,7 +39,7 @@ import type { SwarmConfig } from "@/api/types";
 import { FieldRenderer } from "@/components/integrations/field-renderer";
 import { IntegrationStatusBadge } from "@/components/integrations/integration-status-badge";
 import { RecommendedSkillsSection } from "@/components/integrations/required-skills-section";
-import { SPECIAL_FLOWS } from "@/components/integrations/special-flows";
+import { SPECIAL_FLOWS, useFlowStatuses } from "@/components/integrations/special-flows";
 import { BrandLogo } from "@/components/shared/brand-logo";
 import { EmptyState } from "@/components/shared/empty-state";
 import { PageSkeleton } from "@/components/shared/page-skeleton";
@@ -190,7 +190,8 @@ function IntegrationDetailInner({
   ) : (
     <Icon className="h-6 w-6 text-foreground" aria-hidden="true" />
   );
-  const status = deriveIntegrationStatus(def, configs, envPresence);
+  const flowStatuses = useFlowStatuses();
+  const status = deriveIntegrationStatus(def, configs, envPresence, flowStatuses);
   const allFields = useMemo(() => getIntegrationFields(def), [def]);
 
   const [state, setState] = useState<DirtyState>(initialState);

@@ -14,7 +14,12 @@ import {
 } from "../be/script-connections";
 import { buildScriptCredentialBindings } from "../be/script-credential-broker";
 import { typecheckScript } from "../be/scripts/typecheck";
-import { runReadOnlyQuery, SQL_MAX_ROWS, setSqlExecutorForTesting } from "../be/sql-connections";
+import {
+  runReadOnlyQuery,
+  SQL_MAX_BYTES,
+  SQL_MAX_ROWS,
+  setSqlExecutorForTesting,
+} from "../be/sql-connections";
 import { handleScriptConnectionProxy } from "../http/script-connection-proxy";
 import { handleScriptConnections } from "../http/script-connections";
 import { getPathSegments, parseQueryParams } from "../http/utils";
@@ -137,9 +142,9 @@ beforeEach(async () => {
   leadId = (await createAgent({ name: "sql-lead", isLead: true, status: "idle" })).id;
   workerId = (await createAgent({ name: "sql-worker", isLead: false, status: "idle" })).id;
   executorCalls = [];
-  setSqlExecutorForTesting(async (dsn, query, params) => {
+  setSqlExecutorForTesting(async (dsn, query, params, take) => {
     executorCalls.push({ dsn, query, params });
-    return [{ x: 1 }];
+    take([{ x: 1 }]);
   });
 });
 
@@ -421,14 +426,32 @@ describe("sql-query route", () => {
     expect(response.text).not.toContain("postgres://");
   });
 
-  test("caps rows and reports truncation", async () => {
+  test("caps rows, stops fetching, and reports truncation", async () => {
     const connection = await createSql();
-    setSqlExecutorForTesting(async () =>
-      Array.from({ length: SQL_MAX_ROWS + 5 }, (_, i) => ({ i })),
-    );
+    const accepted: boolean[] = [];
+    setSqlExecutorForTesting(async (_dsn, _query, _params, take) => {
+      for (let b = 0; b < 20; b++) {
+        const more = take(Array.from({ length: 100 }, (_, i) => ({ i: b * 100 + i })));
+        accepted.push(more);
+        if (!more) return;
+      }
+    });
     const body = (await sqlQuery(connection.id, workerId, { sql: "select 1" })).json();
-    expect(body).toMatchObject({ ok: true, rowCount: SQL_MAX_ROWS + 5, truncated: true });
+    expect(body).toMatchObject({ ok: true, rowCount: SQL_MAX_ROWS, truncated: true });
     expect((body.rows as unknown[]).length).toBe(SQL_MAX_ROWS);
+    expect(accepted).toEqual([...Array(10).fill(true), false]);
+  });
+
+  test("caps the serialized size and reports truncation", async () => {
+    const connection = await createSql();
+    const big = "x".repeat(1024 * 1024);
+    setSqlExecutorForTesting(async (_dsn, _query, _params, take) => {
+      take(Array.from({ length: 10 }, (_, i) => ({ i, big })));
+    });
+    const response = await sqlQuery(connection.id, workerId, { sql: "select 1" });
+    const body = response.json();
+    expect(body).toMatchObject({ ok: true, rowCount: 4, truncated: true });
+    expect(response.text.length).toBeLessThan(SQL_MAX_BYTES + 1024);
   });
 });
 
@@ -523,11 +546,13 @@ describe("ctx.api sql runtime", () => {
   }
 });
 
-// Opt-in: proves the read-only guarantee against a real Postgres. CI has no Postgres service.
+// Proves the read-only guarantee against a real Postgres. CI sets the URL from a postgres service
+// in merge-gate.yml and ci.yml; locally it is opt-in.
 // SQL_CONNECTION_TEST_URL=postgres://postgres:<pw>@127.0.0.1:55432/postgres
 describe.skipIf(!REAL_PG_URL)("read-only against real Postgres", () => {
   const dsn = REAL_PG_URL ?? "";
   const table = "sql_conn_readonly_probe";
+  const reader = "sql_conn_reader_probe";
   let admin: SQL;
 
   async function rowCount(): Promise<number> {
@@ -554,6 +579,8 @@ describe.skipIf(!REAL_PG_URL)("read-only against real Postgres", () => {
 
   afterAll(async () => {
     await admin.unsafe(`drop table if exists ${table}`);
+    await admin.unsafe(`drop owned by ${reader}`).catch(() => undefined);
+    await admin.unsafe(`drop role if exists ${reader}`);
     await admin.close();
   });
 
@@ -565,14 +592,31 @@ describe.skipIf(!REAL_PG_URL)("read-only against real Postgres", () => {
     expect(await runReadOnlyQuery(dsn, "select 1 as x")).toMatchObject({ rows: [{ x: 1 }] });
   });
 
-  test("writes fail with SQLSTATE 25006 (read_only_sql_transaction)", async () => {
-    expect(await sqlState(`insert into ${table} (v) values (3)`)).toBe("25006");
-    expect(await sqlState(`insert into ${table} (v) values ($1)`, [3])).toBe("25006");
-    expect(await sqlState(`update ${table} set v = 9`)).toBe("25006");
-    expect(await sqlState(`delete from ${table}`)).toBe("25006");
-    expect(await sqlState("create table sql_conn_should_not_exist (id int)")).toBe("25006");
+  test("writes are refused by the cursor grammar or the read-only transaction", async () => {
+    // 42601: DECLARE ... CURSOR FOR only takes a query. 0A000: no data-modifying WITH.
+    // 25006: read_only_sql_transaction, for writes hidden inside a SELECT.
+    expect(await sqlState(`insert into ${table} (v) values (3)`)).toBe("42601");
+    expect(await sqlState(`insert into ${table} (v) values ($1)`, [3])).toBe("42601");
+    expect(await sqlState(`update ${table} set v = 9`)).toBe("42601");
+    expect(await sqlState(`delete from ${table}`)).toBe("42601");
+    expect(await sqlState("create table sql_conn_should_not_exist (id int)")).toBe("42601");
+    expect(await sqlState(`with d as (delete from ${table} returning *) select * from d`)).toBe(
+      "0A000",
+    );
     expect(await sqlState(`select nextval('${table}_id_seq')`)).toBe("25006");
     expect(await rowCount()).toBe(2);
+  });
+
+  test("the cursor stops at the row cap", async () => {
+    expect(
+      await runReadOnlyQuery(dsn, "select generate_series(1, $1::int) as i", [5000]),
+    ).toMatchObject({
+      rowCount: SQL_MAX_ROWS,
+      truncated: true,
+    });
+    expect(
+      await runReadOnlyQuery(dsn, `select generate_series(1, ${SQL_MAX_ROWS}) as i`),
+    ).toMatchObject({ rowCount: SQL_MAX_ROWS, truncated: false });
   });
 
   test("multi-statement calls are rejected, with or without params", async () => {
@@ -588,10 +632,44 @@ describe.skipIf(!REAL_PG_URL)("read-only against real Postgres", () => {
   });
 
   test("session state never carries into the next call", async () => {
-    await runReadOnlyQuery(dsn, "set default_transaction_read_only = off");
-    expect(await sqlState(`insert into ${table} (v) values (5)`)).toBe("25006");
-    await runReadOnlyQuery(dsn, "set transaction read write").catch(() => undefined);
-    expect(await sqlState(`delete from ${table}`)).toBe("25006");
+    await runReadOnlyQuery(dsn, "set default_transaction_read_only = off").catch(() => undefined);
+    await runReadOnlyQuery(dsn, "select set_config('default_transaction_read_only', 'off', false)");
+    expect(await sqlState(`select nextval('${table}_id_seq')`)).toBe("25006");
+    await runReadOnlyQuery(dsn, "select set_config('transaction_read_only', 'off', false)").catch(
+      () => undefined,
+    );
+    expect(await sqlState(`select nextval('${table}_id_seq')`)).toBe("25006");
     expect(await rowCount()).toBe(2);
+  });
+
+  // The least-privilege role from the script-connections docs page.
+  test("a SELECT-only role cannot reach server files or programs", async () => {
+    await admin.unsafe(`drop owned by ${reader}`).catch(() => undefined);
+    await admin.unsafe(`drop role if exists ${reader}`);
+    await admin.unsafe(
+      `create role ${reader} login password 'reader-probe-pw' nosuperuser nocreatedb nocreaterole noreplication nobypassrls`,
+    );
+    await admin.unsafe(`alter role ${reader} set default_transaction_read_only = on`);
+    await admin.unsafe(`grant usage on schema public to ${reader}`);
+    await admin.unsafe(`grant select on ${table} to ${reader}`);
+    const url = new URL(dsn);
+    url.username = reader;
+    url.password = "reader-probe-pw";
+    const readerDsn = url.toString();
+
+    expect(await runReadOnlyQuery(readerDsn, `select count(*)::int as n from ${table}`)).toEqual({
+      rows: [{ n: 2 }],
+      rowCount: 1,
+      truncated: false,
+    });
+    const denied = async (query: string) => {
+      const err = await runReadOnlyQuery(readerDsn, query).then(
+        () => null,
+        (e: Error) => e,
+      );
+      return /SQLSTATE (\w+)/.exec(err?.message ?? "")?.[1];
+    };
+    expect(await denied("select pg_read_file('/etc/hostname')")).toBe("42501");
+    expect(await denied("select pg_ls_dir('.')")).toBe("42501");
   });
 });

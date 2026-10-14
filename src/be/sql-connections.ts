@@ -51,8 +51,7 @@ export async function resolveSqlDsn(
 // so the parameterless case goes through the tagged-template path instead. Never use `.simple()`.
 // The statement runs as a server-side cursor fetched in batches, so the API never holds more than
 // one batch past the caps. DECLARE only accepts SELECT, VALUES, TABLE and WITH ... SELECT.
-const asTemplate = (text: string) =>
-  Object.assign([text], { raw: [text] }) as unknown as TemplateStringsArray;
+const asTemplate = (text: string): TemplateStringsArray => Object.assign([text], { raw: [text] });
 
 const defaultExecutor: SqlExecutor = async (dsn, query, params, take) => {
   // Bun.SQL global, not `import { SQL } from "bun"`: the node-target CLI bundle cannot import "bun".

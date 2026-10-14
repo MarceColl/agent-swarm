@@ -326,7 +326,7 @@ describe("sql connection registration", () => {
 });
 
 describe("sql-query route", () => {
-  async function createSql(extra: Parameters<typeof upsertScriptConnection>[0] | object = {}) {
+  async function createSql(extra: Partial<Parameters<typeof upsertScriptConnection>[0]> = {}) {
     return upsertScriptConnection({
       slug: "analytics",
       kind: "sql",

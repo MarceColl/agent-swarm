@@ -148,7 +148,7 @@ beforeEach(async () => {
   });
 });
 
-describe("migration 213", () => {
+describe("migration 214", () => {
   test("adds 'sql' to the kind CHECK and requires a DSN key for sql rows", async () => {
     const schema = getDb()
       .query<{ sql: string }, []>(
@@ -182,7 +182,7 @@ describe("migration 213", () => {
     try {
       db.exec(
         readFileSync(
-          new URL("../be/migrations/213_script_connections_sql.sql", import.meta.url),
+          new URL("../be/migrations/214_script_connections_sql.sql", import.meta.url),
           "utf-8",
         ),
       );

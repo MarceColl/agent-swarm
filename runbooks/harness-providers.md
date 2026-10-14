@@ -12,7 +12,7 @@ Operational rules for editing or adding harness providers (claude, codex, openco
 | pi-mono | `pi` | `PiMonoAdapter` | In-process library; OpenRouter, Anthropic, or Amazon Bedrock (via `MODEL_OVERRIDE=amazon-bedrock/*` — see Bedrock auth below) |
 | Devin | `devin` | `DevinAdapter` | Cloud-managed via Cognition `/sessions` API |
 | Claude Managed | `claude-managed` | `ClaudeManagedAdapter` | Anthropic managed sandbox; SSE relay |
-| ACP | `acp` | `ACPAdapter` | Curated `opencode`, `gemini` and `copilot` presets or a custom [Agent Client Protocol](https://agentclientprotocol.com) command. Session knobs such as model use `session/set_config_option` when advertised, with target-specific startup fallbacks. No swarm-side *model-provider* credential — the target owns its own model auth. The target receives a session-scoped `aseph_` token as the swarm MCP bearer, granting that agent's swarm MCP access for up to 24 hours, so point custom targets only at binaries you trust |
+| ACP | `acp` | `ACPAdapter` | Curated `opencode`, `gemini`, `copilot`, `qwen`, `kiro` and `goose` presets or a custom [Agent Client Protocol](https://agentclientprotocol.com) command. Session knobs such as model use `session/set_config_option` when advertised, with target-specific startup fallbacks. No swarm-side *model-provider* credential — the target owns its own model auth. The target receives a session-scoped `aseph_` token as the swarm MCP bearer, granting that agent's swarm MCP access for up to 24 hours, so point custom targets only at binaries you trust |
 | DeepSeek Harness | `dsh` | `DshAdapter` | Spawns `dsh --profile headless --json` per task; OpenRouter or direct DeepSeek API. See [DeepSeek Harness](#deepseek-harness-dsh) below |
 | Amp | `amp` | `AmpAdapter` | Spawns `amp -x --stream-json --stream-json-input` per task; `AMP_API_KEY`; every thread is stored on ampcode.com. See [Amp](#amp-amp) below |
 | Cursor | `cursor` | `CursorAdapter` | In-process `@cursor/sdk` local runtime; inference on Cursor's hosted models with `CURSOR_API_KEY`. See [Cursor](#cursor-cursor) below |
@@ -168,7 +168,7 @@ this retains the native `llm-deepseek` route. The native Flash ID is
 `deepseek-flash` (V4.1 Flash); OpenRouter uses `deepseek/deepseek-v4.1-flash`.
 There is no fallback across providers when the selected route's key is missing.
 
-The full worker image installs `@deepseek-ai/dsh@0.2.1-alpha.1` at build time
+The full worker image installs `@deepseek-ai/dsh@0.2.1-alpha.2` at build time
 in `worker-full-base`, alongside the optional tools in `/opt/global-deps-full`.
 The slim image does not include dsh: use `worker-full` or provision the pinned
 package in your custom image before starting a dsh worker. Both the entrypoint
@@ -226,7 +226,7 @@ What the patch sets, and why:
 Still missing: live steering (`steerModes: []`) and native resume (follow-ups use
 the context preamble). Developer-preview compatibility can change.
 
-Verified against the [upstream headless documentation](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.1-alpha.1/packages/bundle/headless/README.md)
+Verified against the [upstream headless documentation](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.1-alpha.2/packages/bundle/headless/README.md)
 and the installed CLI's top-level and headless help.
 
 ## Cursor (`cursor`)
@@ -312,6 +312,14 @@ Preserve the bridge flag's existing fallback without OAuth credentials.
 Custom executable prefixes must speak the SDK protocol. Never silently remove their arguments.
 Swarm context preambles remain the continuation mechanism. Native SDK resume stays disabled.
 
+## Harness session env: telemetry tag
+
+`spawnProviderProcess` builds `ProviderSessionConfig.env` with `withHarnessTelemetryEnv(freshEnv)`. It sets `DESPLEGA_TELEMETRY_ENV=test` when the resolved env has no non-blank value, and keeps an explicit one. It returns a copy: the runner's `process.env` and the runner's own telemetry keep their environment.
+
+An API an agent boots from its shell (`bun run start:http`, `bun src/http.ts`) is a throwaway QA boot, so it reports `test`, not `production`. That holds for a customer's agents too. An API started outside a harness session is untouched.
+
+The tag reaches the agent's shell only where the adapter hands `config.env` to the process that runs commands: claude (CLI and SDK), codex, amp, dsh. pi, cursor and opencode run commands with the runner's `process.env`. grok and the ACP targets pass an env allowlist that does not include the key. devin and claude-managed run remotely. A new adapter should pass `config.env` to its command runner.
+
 ## `HARNESS_PROVIDER` resolution + live re-assignment
 
 Workers resolve their effective harness provider on each poll iteration, with this precedence (highest first):
@@ -335,9 +343,17 @@ The dashboard runtime editor is the preferred configuration path. Selecting ACP 
 
 OpenCode runs `opencode acp`. Before the first prompt, the adapter applies `MODEL_OVERRIDE` through ACP's advertised `model` config option. It also injects the model into `OPENCODE_CONFIG_CONTENT` before spawn, because the process environment cannot be changed after `session/new`; that startup value is the fallback when the target omits or rejects the protocol option. Missing or rejected options are logged and do not fail the session.
 
-Gemini runs `gemini --acp`. Gemini CLI 0.63.0 advertises no ACP `model` option, so `MODEL_OVERRIDE` reaches it as `GEMINI_MODEL` at spawn. Before spawn, the adapter writes the system prompt to a fresh `mkdtemp` directory outside the task `cwd` and sets `GEMINI_SYSTEM_MD` to that file; an empty prompt keeps Gemini's built-in one. The preset sets `GEMINI_CLI_TRUST_WORKSPACE=true` and forwards only the Gemini API key, Vertex AI and base-URL keys listed in `src/providers/acp-target-catalog.ts`. The full worker image pins the CLI with `GEMINI_CLI_VERSION` in `Dockerfile.worker`.
+Gemini runs `gemini --acp`. Gemini CLI 0.64.0 advertises no ACP `model` option, so `MODEL_OVERRIDE` reaches it as `GEMINI_MODEL` at spawn. Before spawn, the adapter writes the system prompt to a fresh `mkdtemp` directory outside the task `cwd` and sets `GEMINI_SYSTEM_MD` to that file; an empty prompt keeps Gemini's built-in one. The preset sets `GEMINI_CLI_TRUST_WORKSPACE=true` and forwards only the Gemini API key, Vertex AI and base-URL keys listed in `src/providers/acp-target-catalog.ts`. The full worker image pins the CLI with `GEMINI_CLI_VERSION` in `Dockerfile.worker`.
 
-Copilot runs `copilot --acp` (GitHub Copilot CLI, baked pinned into `worker-full-base` via `COPILOT_CLI_VERSION`; the entrypoint FATALs with an install hint when the binary is missing). Copilot advertises no `model` config option, so `MODEL_OVERRIDE` goes to `COPILOT_MODEL` before spawn. The env allowlist is `COPILOT_GITHUB_TOKEN`, the `COPILOT_PROVIDER_*` BYOK keys, `COPILOT_HOME`, `COPILOT_MODEL`, `GH_HOST`, and proxy vars; `GITHUB_TOKEN`/`GH_TOKEN` are deliberately not forwarded. `COPILOT_AUTO_UPDATE=false` is forced. BYOK with a model Copilot does not know needs `COPILOT_PROVIDER_MAX_PROMPT_TOKENS` set to the real window: the first turn is about 150k tokens of tool definitions, and the default budget rejects it. The CLI has no system-prompt flag: the adapter writes the prompt to `.github/instructions/agent-swarm.instructions.md` under a per-task tmp dir and prepends that dir to `COPILOT_CUSTOM_INSTRUCTIONS_DIRS` (verified on 1.0.94: extra dirs load `.github/instructions/*.instructions.md`, not `AGENTS.md`). No file in the task cwd is touched; `cleanupSystemPromptArtifact` removes the dir when the session ends or fails to start.
+Copilot runs `copilot --acp` (GitHub Copilot CLI, baked pinned into `worker-full-base` via `COPILOT_CLI_VERSION`; the entrypoint FATALs with an install hint when the binary is missing). Copilot advertises no `model` config option, so `MODEL_OVERRIDE` goes to `COPILOT_MODEL` before spawn. The env allowlist is `COPILOT_GITHUB_TOKEN`, the `COPILOT_PROVIDER_*` BYOK keys, `COPILOT_HOME`, `COPILOT_MODEL`, `GH_HOST`, and proxy vars; `GITHUB_TOKEN`/`GH_TOKEN` are deliberately not forwarded. `COPILOT_AUTO_UPDATE=false` is forced. BYOK with a model Copilot does not know needs `COPILOT_PROVIDER_MAX_PROMPT_TOKENS` set to the real window: the first turn is about 150k tokens of tool definitions, and the default budget rejects it. The CLI has no system-prompt flag: the adapter writes the prompt to `.github/instructions/agent-swarm.instructions.md` under a per-task tmp dir and prepends that dir to `COPILOT_CUSTOM_INSTRUCTIONS_DIRS` (verified on 1.0.97: extra dirs load `.github/instructions/*.instructions.md`, not `AGENTS.md`). No file in the task cwd is touched; `cleanupSystemPromptArtifact` removes the dir when the session ends or fails to start.
+
+Qwen Code runs `qwen --acp --auth-type <QWEN_AUTH_TYPE, default openai>` (baked pinned via `QWEN_CODE_VERSION`). A fresh worker has no `~/.qwen/settings.json`, and without an auth type the CLI waits for an interactive `/auth`, so the preset always passes one; `qwen-oauth` is rejected because it needs a browser. The default `openai` type reads `OPENAI_API_KEY` and `OPENAI_BASE_URL` (unset means DashScope, not OpenAI). `MODEL_OVERRIDE` goes on argv as `--model`; the ACP `model` option is skipped because it wants a `<id>(<authType>)` value. Like Gemini, the system prompt goes to a `mkdtemp` file outside the task `cwd` and `QWEN_SYSTEM_MD` points at it (this replaces Qwen's built-in prompt); the file is removed when the session ends. Qwen loads the swarm MCP tools lazily, through its tool search.
+
+Kiro runs `kiro-cli acp` (baked pinned via `KIRO_CLI_VERSION` with SHA-256 pins; only `kiro-cli` and `kiro-cli-chat` are installed). Auth is `KIRO_API_KEY`, which only paid Kiro plans can create; without it the CLI exits before `initialize` with "You are not logged in". 2.29.1 advertises no ACP config options, so `MODEL_OVERRIDE` goes on argv as `--model`. Kiro takes its prompt from a Kiro agent config, so the swarm system prompt is not injected (same as OpenCode).
+
+Goose runs `goose acp` (baked pinned via `GOOSE_VERSION` with SHA-256 pins). Set `GOOSE_PROVIDER` and that provider's key; the preset forces `GOOSE_DISABLE_KEYRING=1` (no Secret Service in a worker). `MODEL_OVERRIDE` uses the advertised ACP `model` option, with `GOOSE_MODEL` as the startup fallback. The system prompt goes to a `mkdtemp` file referenced by `GOOSE_MOIM_MESSAGE_FILE`, which Goose injects into each turn's context; no `.goosehints` is written into the repo. Goose sends every MCP tool to the model, so OpenAI-API providers reject the swarm's tool list (more than 128 tools); use a provider without that cap.
+
+OpenClaw and Hermes are not presets. `openclaw acp` is a bridge to a running OpenClaw Gateway, rejects per-session `mcpServers` (so it cannot receive the swarm MCP server), and needs Node 24.16+. Hermes Agent has no installable package (upstream refuses wheel and sdist builds; the only Linux install is a git-checkout installer that brings its own Python, Node and ffmpeg, about 2.8 GB), and its ACP server takes the model only from `config.yaml`. Both still work as custom targets on an image that installs them.
 
 Custom targets use `ACP_TARGET_COMMAND` plus JSON-array `ACP_TARGET_ARGS`. `ACP_TARGET_ENV_KEYS` is a JSON array of environment/config keys explicitly allowed into the child process; the adapter never forwards the complete resolved environment. `ACP_MODEL_ENV_KEY` optionally maps `MODEL_OVERRIDE` into a target-specific environment variable as its model fallback. `ACP_CONFIG_OPTIONS` is a JSON object of additional string or boolean ACP option values.
 
@@ -780,3 +796,13 @@ This runbook applies when modifying:
 - `src/prompts/*` (system-prompt composition)
 - `docker-entrypoint.sh` (provider branches)
 - Or adding a new provider end-to-end
+
+## Worker exit limit
+
+`SWARM_EXIT_AFTER_TASKS=N` sets a positive integer limit for completed assigned or resumed task executions.
+Offer review and mention sessions do not count toward this limit.
+Unset, invalid, or nonpositive values keep the existing continuous runner behavior.
+The runner stops acquiring work when completed and active sessions reach the limit.
+After the limit completes with no active session, the runner uses its normal shutdown routine and exits with code 0.
+Shutdown terminates process groups, emits telemetry, saves PM2 state, and sends `/close` with `runtimeShutdown: true`.
+Docker pools with a per-task lifecycle inject a limit of 1.

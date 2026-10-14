@@ -49,7 +49,10 @@ rate by hand should also update this file.
     shortname forms, so they're projected under `provider='pi'` as well.
   - OpenAI models → rows under `provider='codex'`.
   - OpenRouter models → rows under `provider='opencode'`, `provider='pi'` and
-    `provider='dsh'` (dsh strips `openrouter/` at lookup). Any `google/...`
+    `provider='dsh'` (dsh strips `openrouter/` at lookup). These are
+    OpenRouter's model-level list price, the cheapest endpoint's rate, so they
+    under-price a request routed to a dearer endpoint. opencode posts
+    OpenRouter's billed `usage.cost` instead when it has it. Any `google/...`
     row additionally gets projected under `provider='gemini'` (both the
     stripped name and the full `google/...` id) so internal-ai callers find
     a hit either way.
@@ -205,6 +208,8 @@ and heartbeat-classified roots are omitted, and the metrics remain separate.
   cannot justify a rate alias.
 
 ## When a model is missing
+
+Cost POSTs accept an optional UUID `id`. The runner reuses it across retries. Repeated IDs return the stored record without changing its price.
 
 If `POST /api/session-costs` arrives with a `(provider, model)` pair that has
 no input/output pricing rows at the lookup time, the row is persisted with

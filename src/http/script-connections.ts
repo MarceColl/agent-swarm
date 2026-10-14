@@ -26,6 +26,7 @@ import {
   type ConnectionAuthSummary,
   connectionAuthInputFromFlat,
   connectionAuthSummary,
+  deleteScriptConnection,
   findCredentialBindingByIdentity,
   getCredentialBindingById,
   getScriptConnectionById,
@@ -37,6 +38,7 @@ import {
   type ScriptConnectionKind,
   type ScriptConnectionRecord,
   type ScriptCredentialBindingRecord,
+  SqlDsnInputSchema,
   setScriptConnectionEnabled,
   upsertCredentialBinding,
   upsertScriptConnection,
@@ -79,7 +81,7 @@ const providerSchema = z
   .regex(/^[A-Za-z0-9_-]+$/);
 
 const scopeSchema = z.enum(["global", "agent", "repo"]);
-const connectionKindSchema = z.enum(["openapi", "graphql", "mcp"]);
+const connectionKindSchema = z.enum(["openapi", "graphql", "mcp", "sql"]);
 
 const idParamsSchema = z.object({ id: z.string().uuid() });
 const providerParamsSchema = z.object({ provider: providerSchema });
@@ -132,6 +134,7 @@ const upsertConnectionBodySchema = z.discriminatedUnion("kind", [
     kind: z.literal("mcp"),
     mcpServerId: z.string().uuid(),
   }),
+  connectionBaseBodySchema.extend({ kind: z.literal("sql"), dsn: SqlDsnInputSchema.optional() }),
 ]);
 
 const disableConnectionBodySchema = z.object({ enabled: z.boolean() });
@@ -231,7 +234,7 @@ const connectionAuthTypeResponseSchema = z.enum(["none", "bearer", "header", "qu
 // value (never written via this handler's upsert path, but readable via the
 // list/get routes for rows written elsewhere) — wider than the HTTP-body-only
 // `connectionKindSchema` above.
-const connectionRecordKindSchema = z.enum(["raw", "openapi", "mcp", "graphql"]);
+const connectionRecordKindSchema = z.enum(["raw", "openapi", "mcp", "graphql", "sql"]);
 
 const bindingSummarySchema = z.object({
   id: z.string(),
@@ -547,6 +550,27 @@ const setConnectionEnabledRoute = route({
     200: {
       description: "Updated script connection",
       schema: z.object({ connection: decoratedConnectionSchema }),
+    },
+    403: { description: "Only the lead agent can manage script connections" },
+    404: { description: "Script connection not found" },
+  },
+  rbac: { permission: "script-connection.manage" },
+});
+
+const deleteConnectionRoute = route({
+  method: "delete",
+  path: "/api/script-connections/{id}",
+  pattern: ["api", "script-connections", null],
+  operationId: "script_connections_delete",
+  summary: "Delete a script connection",
+  description:
+    "Hard-deletes the connection, its auto-managed credential binding, and any derived inline secret it owns.",
+  tags: ["Script Connections"],
+  params: idParamsSchema,
+  responses: {
+    200: {
+      description: "Script connection deleted",
+      schema: z.object({ deleted: z.literal(true), id: z.string() }),
     },
     403: { description: "Only the lead agent can manage script connections" },
     404: { description: "Script connection not found" },
@@ -2040,6 +2064,7 @@ export async function handleScriptConnections(
           ? existingOpenapiConnection?.openapiSpecFetchedAt
           : undefined,
         mcpServerId: parsed.body.kind === "mcp" ? parsed.body.mcpServerId : null,
+        sqlDsn: parsed.body.kind === "sql" ? parsed.body.dsn : undefined,
         enabled,
         agentId,
         userId,
@@ -2108,6 +2133,19 @@ export async function handleScriptConnections(
     setConnectionEnabledRoute.respond(res, 200, {
       connection: (await decorateConnections([updated]))[0]!,
     });
+    return true;
+  }
+
+  if (deleteConnectionRoute.match(req.method, pathSegments)) {
+    const parsed = await deleteConnectionRoute.parse(req, res, pathSegments, queryParams);
+    if (!parsed) return true;
+    if (!(await ensureConnectionAdmin(req, res, agentId))) return true;
+    const deleted = await deleteScriptConnection(parsed.params.id);
+    if (!deleted) {
+      jsonError(res, "Script connection not found.", 404);
+      return true;
+    }
+    deleteConnectionRoute.respond(res, 200, { deleted: true, id: deleted.id });
     return true;
   }
 

@@ -61,6 +61,12 @@ SDK allowlist instead), and HTTP REST routes are generally not gated.
   - [extension-catalog](#extension-catalog)
   - [extension-install](#extension-install)
   - [extension-list](#extension-list)
+  - [runtime-pool-list](#runtime-pool-list)
+  - [runtime-pool-upsert](#runtime-pool-upsert)
+  - [runtime-pool-delete](#runtime-pool-delete)
+  - [runtime-pool-bind-agent](#runtime-pool-bind-agent)
+  - [runtime-pool-create-agent](#runtime-pool-create-agent)
+  - [runtime-controller-list](#runtime-controller-list)
   - [script-delete](#script-delete)
   - [script-query-types](#script-query-types)
   - [launch-script-run](#launch-script-run)
@@ -610,8 +616,8 @@ Lead-only registry management for scripts ctx.api/ctx.mcp connections. Supports 
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
-| `action` | `list \| upsert-openapi \| upsert-mcp \| upsert-graphql \| refresh \| disable` | Yes | - | List, create/update, refresh, or disable a script connection. |
-| `id` | `string` | No | - | Existing connection ID for update, refresh, or disable. |
+| `action` | `list \| upsert-openapi \| upsert-mcp \| upsert-graphql \| refresh \| disable \| delete` | Yes | - | List, create/update, refresh, disable, or delete a script connection. delete is permanent: it removes the connection, its managed credential binding, and any inline secret it owns. |
+| `id` | `string` | No | - | Existing connection ID for update, refresh, disable, or delete. |
 | `slug` | `string` | No | - | Stable script namespace slug exposed under ctx.api or ctx.mcp. |
 | `displayName` | `string` | No | - | Human-readable connection name. |
 | `scope` | `global \| agent \| repo` | No | - | Connection visibility scope. |
@@ -667,7 +673,7 @@ Manage external HTTP API endpoints for swarm scripts (POST /api/x/script/<id>). 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
 | `name` | `unknown` | Yes | - | Stable script name within the selected scope. |
-| `source` | `string` | Yes | - | TypeScript source, typechecked before saving. Must `export default async function (args, ctx)` — args FIRST, ctx second. Import `ScriptContext` from "swarm-sdk" to type `ctx`. |
+| `source` | `string` | Yes | - | TypeScript source, typechecked before saving. Must `export default async function (args, ctx)` — args FIRST, ctx second. Import `ScriptContext` from "swarm-sdk" to type `ctx`. Schemas can import "zod" or "zod/mini"; Mini uses functional forms such as z.optional(z.string()). |
 | `description` | `string` | No | "" | Human-readable script description. |
 | `intent` | `string` | No | "" | Why this script exists. |
 | `scope` | `unknown` | No | "agent" | Persist under agent or global scope. |
@@ -739,6 +745,60 @@ Activate a stored extension version, reloading it if enabled. Requires a lead, o
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
 | `enabledOnly` | `boolean` | No | - | Return only enabled extensions. |
+
+### runtime-pool-list
+
+**Runtime Pool List**
+
+List runtime pools and their configuration.
+
+*No parameters*
+
+### runtime-pool-upsert
+
+**Runtime Pool Upsert**
+
+Create a runtime pool, or update a pool by id. Creation requires name, kind, and one controller placement. Operator or user callers only: agents, including the lead, get a permission error. A lead can place agents into existing pools with runtime-pool-create-agent or runtime-pool-bind-agent.
+
+See the [input schema](https://github.com/desplega-ai/agent-swarm/blob/main/src/tools/runtime-pool-upsert.ts) for parameters.
+
+### runtime-pool-delete
+
+**Runtime Pool Delete**
+
+Delete a runtime pool. Set force to unbind its agents before deletion.
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `poolId` | `string` | Yes | - | - |
+| `force` | `boolean` | No | - | - |
+
+### runtime-pool-bind-agent
+
+**Runtime Pool Bind Agent**
+
+Bind an agent to a runtime pool. Use a null poolId to remove the binding.
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `agentId` | `string` | Yes | - | - |
+| `poolId` | `string` | Yes | - | - |
+
+### runtime-pool-create-agent
+
+**Runtime Pool Create Agent**
+
+Create an offline agent bound to a pool. An existing lead prevents creation of another lead.
+
+See the [input schema](https://github.com/desplega-ai/agent-swarm/blob/main/src/tools/runtime-pool-create-agent.ts) for parameters.
+
+### runtime-controller-list
+
+**Runtime Controller List**
+
+List runtime controllers. Responses contain secret key names and omit secret values.
+
+*No parameters*
 
 ### script-delete
 
@@ -1728,7 +1788,7 @@ Refresh an app's declared sources: pull each selected (model x source) pair and 
 
 **Create or update an app**
 
-Stores a schema-backed app definition with models, queries/actions, pages, reusable elements, optional userConfig fields, and an optional top-level theme (a dashboard preset slug for the app's canvas — hive (stock; omit to inherit the viewer's theme), meadow, iris, rose, cobalt, ember, carbon, plus the classic presets github, vscode, material, solarized, tokyo, monokai, gruvbox; viewers can override it per-user; unknown slugs degrade to the viewer's dashboard theme), then returns its dashboard URL. userConfig is versioned schema only; each user's values are stored separately, survive rollback, and schema changes are always compatible. Pages may bind a declared field read-only at exactly /user/<field>; pure and bound reusable elements must receive that value through a prop. Elements are private by default: pure elements read declared props, allow $item/$index inside repeats, may expose one leaf ElementSlot, and cannot invoke actions; bound elements may use the defining app's queries/actions, while exported bound elements cannot navigate. Prop kinds include enum with a required non-empty enum values array. Pages or elements reuse them with literal ElementRef targets, and cross-app refs require export: true. Zero-model pure-UI apps are valid. Pass appId to update; breaking a referenced export is blocked by the compatibility gate unless forceElementBreak explicitly names it.
+Stores a schema-backed app definition with models, queries/actions, pages, reusable elements, optional userConfig fields, and an optional top-level theme (a dashboard preset slug for the app's canvas — hive (stock; omit to inherit the viewer's theme), meadow, iris, rose, cobalt, ember, carbon, plus the classic presets github, vscode, material, solarized, tokyo, monokai, gruvbox, catppuccin; viewers can override it per-user; unknown slugs degrade to the viewer's dashboard theme), then returns its dashboard URL. userConfig is versioned schema only; each user's values are stored separately, survive rollback, and schema changes are always compatible. Pages may bind a declared field read-only at exactly /user/<field>; pure and bound reusable elements must receive that value through a prop. Elements are private by default: pure elements read declared props, allow $item/$index inside repeats, may expose one leaf ElementSlot, and cannot invoke actions; bound elements may use the defining app's queries/actions, while exported bound elements cannot navigate. Prop kinds include enum with a required non-empty enum values array. Pages or elements reuse them with literal ElementRef targets, and cross-app refs require export: true. Zero-model pure-UI apps are valid. Pass appId to update; breaking a referenced export is blocked by the compatibility gate unless forceElementBreak explicitly names it.
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|

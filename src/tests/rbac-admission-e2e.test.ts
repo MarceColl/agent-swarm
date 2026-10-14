@@ -120,7 +120,9 @@ describe("RBAC admission over real HTTP", () => {
     server = await spawnSwarmServer({
       dbPath,
       logPath: join(dir, "server-on.log"),
-      env: { RBAC_ENABLED: "true" },
+      // Flush audit rows every 100ms instead of 2s so the audit wait below
+      // returns as soon as the rows land.
+      env: { RBAC_ENABLED: "true", RBAC_AUDIT_FLUSH_MS: "100" },
     });
     await registerAgent(server.base, WORKER_A, "rbac-admission-worker", false);
 
@@ -293,9 +295,7 @@ describe("RBAC admission over real HTTP", () => {
     expect(maskedSecretRead.status).toBe(200);
     expect(configValue(maskedSecretRead.body, CONFIG_SECRET_KEY)).toBe("********");
     expect(maskedSecretRead.body.message).toContain("secret values masked");
-    expect(maskedSecretRead.body.message).toContain(
-      "reading unmasked secrets requires the lead agent",
-    );
+    expect(maskedSecretRead.body.message).toContain("this token cannot read secrets in this scope");
 
     const secretlessMcpList = await api(server.base, "GET", `/api/agents/${WORKER_A}/mcp-servers`, {
       bearer: userToken,

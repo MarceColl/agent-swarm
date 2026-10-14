@@ -263,6 +263,7 @@ export const LEGACY_RULES = {
 export const LEGACY_POLICY = {
   "user.manage": leadOnly,
   "agent.profile.update.any": leadOnly,
+  "agent.act.any": leadOnly,
   "agent.context.read.any": leadOnly,
   "task.cancel.any": leadOrTaskCreator,
   "approval.cancel.any": humanOrLeadOrResourceOwner,
@@ -302,6 +303,8 @@ export const LEGACY_POLICY = {
   "config.write.any": leadOnly,
   "config.delete.any": leadOnly,
   "config.read.secrets": leadOnly,
+  // HTTP runtime tokens can read their own resolved config in src/http/config.ts.
+  // Lead tokens retain config.read.secrets. This exception does not grant config administration.
   "models.catalog.write": leadOrOperator,
   "models.harness-support.write": agentOrOperator,
   "skill.create.swarm": leadOnly,
@@ -332,6 +335,11 @@ export const LEGACY_POLICY = {
   "script.api.update": leadOnly,
   "script.api.rotate": leadOnly,
   "script.api.delete": leadOnly,
+  // Pool writes pick the image that receives a runtime token, so only humans
+  // may make them. The lead may only place agents into operator-made pools.
+  "runtime_pool.write": operatorOrUser,
+  "runtime_pool.bind": leadOrOperatorOrUser,
+  "runtime_controller.write": operatorOrUser,
   "extension.write": extensionWrite,
   "extension.activate": extensionActivation,
   "extension.install.inline": leadOrOperatorOrUser,

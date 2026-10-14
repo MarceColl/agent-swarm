@@ -4,6 +4,12 @@ import type { SwarmSpan } from "../otel";
 import { isEnvFlagEnabled } from "../utils/env-flag";
 import { scrubSecrets } from "../utils/secret-scrubber";
 
+export function duplicateGuardedQueryKey(query: URLSearchParams): string | undefined {
+  return ["agentId", "repoId", "includeSecrets", "resolveSecrets"].find(
+    (key) => query.getAll(key).length > 1,
+  );
+}
+
 const DEFAULT_ALLOWED_ORIGINS = [
   "https://*.agent-swarm.dev",
   "https://*.agent-swarm.cloud",
@@ -116,7 +122,7 @@ export function setCorsHeaders(req: IncomingMessage, res: ServerResponse) {
     const askedHeaders = Array.isArray(reqHeaders) ? reqHeaders.join(", ") : reqHeaders;
     res.setHeader(
       "Access-Control-Allow-Headers",
-      askedHeaders ?? "Authorization, Content-Type, X-Agent-ID, X-Requested-With",
+      askedHeaders ?? "Authorization, Content-Type, X-Agent-ID, X-Requested-With, X-Swarm-User-Id",
     );
     res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
     res.setHeader("Access-Control-Expose-Headers", "Content-Type, Content-Length, ETag, Location");

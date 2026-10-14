@@ -68,9 +68,10 @@ Full rules: [runbooks/extensions.md](./runbooks/extensions.md).
 | Command | What it does |
 |---|---|
 | `bun install` | Install deps |
-| `bun run start:http` | MCP HTTP server (port 3013) |
+| `bun run start:http` | MCP HTTP server (port 3013). For a test or QA boot, prefix `DESPLEGA_TELEMETRY_ENV=test` |
 | `bun run dev:http` | Hot reload, portless: `https://api.swarm.localhost:1355` |
 | `bun run lint:fix` | Lint & format with Biome |
+| `bun run lint:slop` | Anti-slop Oxlint rule subset (`oxlint.config.ts`, vendored plugin in `tools/oxlint/anti-slop/`) |
 | `bun run check` | Agent check loop: frozen install, Biome + tsgo + affected tests on your change |
 | `bun run tsc:check` | Type check with tsgo (`tsc:check:tsc` runs tsc 5, the CI authority) |
 | `bun run test:root` | Run root unit tests (`bun run test:root -- src/tests/<file>.test.ts` for one) |
@@ -325,6 +326,7 @@ Before opening the PR, mirror the rest of the gate (run from repo root):
 ```bash
 bun run check
 bun run lint           # whole lint scope; NOT lint:fix — CI runs `lint` (read-only)
+bun run lint:slop      # anti-slop Oxlint rule subset
 bun run tsc:check:tsc  # tsc 5, the CI authority (`tsc:check` runs tsgo)
 bun run test:root -- --parallel=4     # CI: 2 shards x --parallel=4, balanced by cached --timings
 bun run e2e                          # black-box contract suite: boots the API on a free port, no Docker, no LLM
@@ -407,6 +409,12 @@ Full rulebook: [apps/evals/SCENARIO-AUTHORING.md](./apps/evals/SCENARIO-AUTHORIN
 <important if="you are modifying heartbeat, crash-recovery, or task-assignment/routing logic (src/heartbeat/*, src/tasks/worker-follow-up.ts resume/remediation, the pool/claim path in src/http/poll.ts + src/be/db.ts, or any stall/liveness/reaper threshold)">
 
 [runbooks/heartbeat-crash-recovery.md](./runbooks/heartbeat-crash-recovery.md) is the canonical flow reference — the heartbeat sweep, the stalled-task classifier, and the crash-recovery routing heuristic, with mermaid diagrams + pseudocode. It stores **only the current behavior (no history)**. Update it in the **same PR** whenever you change any of this logic so the diagrams/pseudocode stay true.
+
+</important>
+
+<important if="you are modifying runtime providers (src/runtime-providers/*), runtime pools or supervisor code (src/be/runtime-pools/*), or adding an infrastructure adapter">
+
+Adapter contract, supervisor behavior, owner isolation, and same-PR documentation rules: [runbooks/runtime-providers.md](./runbooks/runtime-providers.md).
 
 </important>
 

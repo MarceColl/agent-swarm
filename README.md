@@ -85,17 +85,26 @@ The plugin's [privacy](https://www.agent-swarm.dev/privacy) and
 [terms](https://www.agent-swarm.dev/terms) links describe the Agent Swarm website and
 Cloud service. The self-hosted software remains covered by the [MIT License](./LICENSE).
 
+Or self-host with the one-shot installer. It checks Docker and Compose v2, installs Bun when missing, runs `agent-swarm onboard --yes`, and prints the dashboard `/setup` link:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/desplega-ai/agent-swarm/main/install.sh | bash
+```
+
 Or use the examples directly:
 
 ```bash
 git clone https://github.com/desplega-ai/agent-swarm.git && cd agent-swarm
-cp .env.docker.example .env  # Set API_KEY, a harness credential, and all eight agent UUIDs.
+cp .env.docker.example .env  # Set API_KEY and the credential for your HARNESS_PROVIDER.
 openssl rand -base64 32 > encryption_key
 chmod 600 .env encryption_key
 docker compose -f docker-compose.example.yml --env-file .env up -d
 ```
 
-Read the [Compose checklist](./skills/agent-swarm/references/compose.md) before starting. API: http://localhost:3013, with `/docs` and `/openapi.json`. [Dashboard](https://app.agent-swarm.dev): connect it to your API.
+Agent ID variables are optional. Each container generates a UUID on first boot and keeps it in its personal volume, so identity survives restarts. Pin `*_AGENT_ID` in `.env` only to keep an existing identity or to survive removing volumes.
+
+Read the [Compose checklist](./skills/agent-swarm/references/compose.md) before starting. API: http://localhost:3013, with `/docs` and `/openapi.json`.
+Next, open the [dashboard](https://app.agent-swarm.dev) and connect it to your API with `API_KEY`. A new install lands on `/setup`, a guided first run that covers providers, agents, memory, integrations, and a first task.
 Kubernetes: [install the OCI Helm chart](./charts/agent-swarm/README.md).
 
 ## Integrations

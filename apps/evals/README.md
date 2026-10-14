@@ -46,7 +46,7 @@ EVALS_DB_PATH=$PWD/evals.db bun --env-file=../../.env src/cli.ts serve          
 EVALS_DB_PATH=$PWD/evals.db bun --env-file=../../.env src/cli.ts publish --suite 1.0 --run <runId>  # freeze a matrix run for /benchmark
 ```
 
-`publish` writes a frozen snapshot plus a disclosure bundle to `benchmark/<suite>/`, which the server serves without auth at `/benchmark`. It refuses a run that is not finished, misses a public scenario × config cell, has any cell under 5 graded attempts, or fails grader validation. Held-out scenarios (`HELD_OUT_SCENARIO_IDS` in `scenarios/suite.ts`) never enter the snapshot. Commit the written directory in its own PR: merging it is what makes the numbers public. Methodology: [docs/methodology.md](docs/methodology.md). For local UI work, `bun scripts/benchmark-fixture.ts /tmp/bm` writes a synthetic snapshot; serve it with `EVALS_BENCHMARK_DIR=/tmp/bm`.
+`publish` writes a frozen snapshot plus a disclosure bundle to `benchmark/<suite>/`, which the server serves without auth at `/benchmark`. It refuses a run that is not finished, misses a public scenario × config cell, has any cell under 5 graded attempts, or fails grader validation. Held-out scenarios (`HELD_OUT_SCENARIO_IDS` in `scenarios/suite.ts`) never enter the snapshot. Commit the written directory in its own PR: merging it is what makes the numbers public. `GET /api/runs/:id/publish-bundle?suite=1.0&harnessCommit=<sha>` (API key required) returns the same files as JSON, or the refusal lines, without writing anything; the weekly workflow uses it. Set `EVALS_HARNESS_COMMIT` on a deploy without `.git` so a snapshot published there records its commit. Methodology: [docs/methodology.md](docs/methodology.md). For local UI work, `bun scripts/benchmark-fixture.ts /tmp/bm` writes a synthetic snapshot; serve it with `EVALS_BENCHMARK_DIR=/tmp/bm`.
 
 Scheduled-tier presets (`--preset nightly-canary`, `--preset weekly-matrix`) also carry a run plan (repeats and metered cap) that explicit flags override; `--scenarios suite` expands to every scenario of the current suite version. `POST /api/runs` takes the same via `preset` and `maxMeteredUsd`; a `preset` with no `scenarioIds` runs the whole suite. No schedule is switched on: these only name what a run contains.
 
@@ -98,7 +98,7 @@ Local-first dashboard + API; **runs can be triggered, resumed, and cancelled fro
 - `#/scenarios` — searchable scenario registry; `#/scenarios/:id` shows what the scenario will do (tasks, seeding, checks, judges, rubric) + recent attempts across runs.
 - Light/dark theme (persisted, follows `prefers-color-scheme`).
 
-Key endpoints: `GET/POST /api/runs`, `POST /api/runs/:id/{resume,cancel}`, `GET /api/runs/:id`, `GET /api/attempts/:id{,/transcript}`, `GET /api/scenarios{,/:id}`, `GET/POST /api/configs`, `PATCH /api/configs/:id`, `GET /api/models`, `POST /api/models/refresh`, `GET /api/analytics`, `GET /api/analytics/{suites,frontier,leaderboard,heatmap,reliability,compare,cell}`, `GET /api/artifacts/:id`.
+Key endpoints: `GET/POST /api/runs`, `POST /api/runs/:id/{resume,cancel}`, `GET /api/runs/:id`, `GET /api/runs/:id/regression`, `GET /api/attempts/:id{,/transcript}`, `GET /api/scenarios{,/:id}`, `GET/POST /api/configs`, `PATCH /api/configs/:id`, `GET /api/models`, `POST /api/models/refresh`, `GET /api/analytics`, `GET /api/analytics/{suites,frontier,leaderboard,heatmap,reliability,compare,cell}`, `GET /api/artifacts/:id`.
 
 `GET /api/models` feeds every model name and price in the UI: `models` is the judge picker list (openrouter only), `harnessModels` holds the claude (anthropic) and codex (openai) entries used only to name and price ids, `aliases` maps bare claude shortnames, and `catalog` says whether the data is `live`, `db` (last persisted fetch) or the committed `snapshot`, and when it was fetched. `GET /api/configs` rows carry `resolvedModel`: what a `modelAlias` resolves to today. The Configs page shows the catalog badge and a refresh button (`POST /api/models/refresh`).
 
@@ -111,6 +111,23 @@ and tests.
 `POST /api/runs` and `POST /api/runs/:id/resume` are also guarded by
 `EVALS_MAX_CONCURRENT_RUNS` (default `1`). The cap counts runs actively executing inside the
 serve process; when the cap is reached, the API returns HTTP 429.
+
+### Scheduled runs (nightly canary and weekly matrix)
+
+The trigger lives in our deployed swarm, not in this repo: a scheduled swarm workflow `evals-nightly` starts the run with `POST /api/runs {"preset": "nightly-canary"}` (or `weekly-matrix`), retrying 5xx. Two schedules fire it in Europe/Madrid time: the canary Monday to Saturday at 03:00, the matrix Sunday at 03:00 (the matrix already covers the canary configs, and the service runs one eval run at a time). The service key reaches the request through a swarm credential binding for this host, so no CI secret holds it. After a fixed wait (3 h canary, 5.5 h matrix) the workflow reads `GET /api/runs/:id/regression` and posts to Slack itself only when the service did not: the run never started, it is not final, or no summary went out. Trigger the workflow by hand with `{"tier": "canary"}`; `{"dryRun": true}` only reads `GET /api/runs?limit=1` and posts nothing. The service does the rest for a run started from a scheduled preset (`SCHEDULED_PRESET_IDS` in `configs/presets.ts`: `nightly-canary`, `weekly-matrix`):
+
+- **Scenarios.** `nightly-canary` runs the 9 public single-run scenarios (`canarySuiteScenarioIds()`: no held-out, no `-solo`); `weekly-matrix` runs the whole suite, held-out and solo baselines included. Repeats and the metered $ cap come from the preset (3 x $4.50, 5 x $37).
+- **Survives a redeploy.** The service auto-deploys on every push to `main` that touches its watch paths (root `package.json` included, so every release), at any hour. On SIGTERM a scheduled run stays `running`; the next boot reaps its in-flight attempts and resumes it, re-queueing only the attempts the restart cut (real errors stay closed, the run's cost cap still counts earlier spend). A run resumes at most 3 times (`auto_resumes`), so a run that keeps crashing the service stays failed. Manual runs still need `POST /api/runs/:id/resume`.
+- **Regression check.** When the run finishes, `src/regression.ts` compares each config x scenario cell with the same preset's last 14 finished runs (same `resolved_model`, same scenario version; under 9 graded baseline attempts, nothing is judged). By the cell's baseline pass rate:
+  - 95% or more (the paging tier): with 3 repeats, 1 failure is noise, 2 flag and start 6 automatic reruns, 3 page at once. A flagged cell pages only when its current + rerun attempts differ from the baseline by Fisher's exact test at p < 0.01 after Holm correction across the run's flagged cells; otherwise it is `cleared`. Separately, a drop in the mean score of the passing attempts flags (never pages) when its 95% bootstrap CI is below 0 and the drop exceeds the minimum detectable effect from the baseline's variance (at least 5 points).
+  - 50% to 95%: `quarantine`, reported and never flagged. Under 50%: `broken`, not flaky.
+  - A config whose `resolved_model` changed starts a new baseline and reports `model-changed` instead of flagging.
+  - Run cost (metered or notional) over 1.5x the config's baseline median is flagged.
+
+  The reruns are one extra run (`rerun_of` set, $2 cap). Not built: quarantine owners and 14-day expiry, which need a store; the summary lists quarantined cells so someone can take them.
+- **One Slack summary.** Posted to `EVALS_SLACK_WEBHOOK_URL` once nothing is left to wait for (`summary_posted_at` dedupes resumes): pass rate per scenario and config, pages, flags, cost drift, model changes, infra errors (with a rate-limit count), metered cost against the cap, and a link to the run (`EVALS_PUBLIC_URL`, default `https://evals.agent-swarm.dev`). A run that ends `failed` or `cancelled` posts a short notice instead. A run the cost cap stopped still ends `done` and posts the normal summary, with the cancelled attempts counted under Infra. With `EVALS_SLACK_WEBHOOK_URL` unset the service only logs the summary, `summary_posted_at` stays null, and the workflow's fallback posts instead.
+- **Weekly publish.** After the matrix's check, the workflow's `publish` node reads `GET /api/runs/:id/publish-bundle` and opens a PR off `main` committing `apps/evals/benchmark/1.0/` (a human merges it; merge plus an evals redeploy makes it public). A refused run posts its refusal lines to the evals channel instead. The canary never publishes.
+- **`GET /api/runs/:id/regression`.** The report and the Slack text for a scheduled run, computed from the database now; `final` is false while a rerun is pending. Only runs started with a scheduled `preset` (`POST /api/runs {"preset": "nightly-canary"}`) have one.
 
 ### Suite analytics API
 
@@ -163,6 +180,8 @@ Required Dokploy env/secrets:
 | `EVALS_E2B_TEMPLATE_API` | no | API sandbox template override. |
 | `EVALS_E2B_TEMPLATE_WORKER` | no | Worker sandbox template override. |
 | `EVALS_MODEL_CATALOG_REFRESH` | no | `off` disables the models.dev refresh loop; the committed snapshot serves. |
+| `EVALS_SLACK_WEBHOOK_URL` | for scheduled runs | Slack incoming webhook for the one summary a scheduled run posts. Unset: the summary is only logged. |
+| `EVALS_PUBLIC_URL` | no | Base URL for run links in that summary; defaults to `https://evals.agent-swarm.dev`. |
 
 Do not use `EVALS_DB_PATH` for Dokploy unless intentionally running an offline disposable DB; the
 container filesystem can be replaced on redeploy, so persisted history should use the Turso
@@ -290,6 +309,7 @@ The DB of record is the Turso database `swarm-evals-local`, accessed through a *
 | `EVALS_CODEX_BILLING` | `subscription` if the `OPENAI_API_KEY` given to codex workers fronts a flat plan; default metered (counts toward the run's cost cap) |
 | `EVALS_SUBSCRIPTION_CONFIG_CONCURRENCY` | max concurrent attempts per subscription-billed config (default `3`) |
 | `EVALS_E2B_USD_PER_SANDBOX_HOUR` | flat per-sandbox E2B price for the cost cap's sandbox estimate; unset = E2B's published rates for the API (2 vCPU / 2 GiB) and worker (4 vCPU / 8 GiB) templates, see `src/cost/billing.ts` |
+| `EVALS_SLACK_WEBHOOK_URL` / `EVALS_PUBLIC_URL` | Slack webhook and link base for a scheduled run's summary (see [Scheduled runs](#scheduled-runs-nightly-canary-and-weekly-matrix)) |
 | `EVALS_MODEL_CATALOG_REFRESH` | set to `off` to skip the models.dev boot load and 6h refresh and serve the committed snapshot (see [Model catalog](#model-catalog-and-latest-aliases)) |
 | `EVALS_E2B_TEMPLATE_API` / `EVALS_E2B_TEMPLATE_WORKER` | template overrides (default `agent-swarm-{api,worker}-latest`; see [Evaluating a branch](#evaluating-a-branch)) |
 

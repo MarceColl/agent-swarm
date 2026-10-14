@@ -43,6 +43,7 @@ import {
   splitLegacyModelAlias,
 } from "@/types";
 import { findJsonSchemaShapeErrors } from "@/workflows/json-schema-validator";
+import { isAgentReachable } from "../be/runtime-pools/reachability";
 import { looseAgentTaskOutputSchema } from "./get-task-details";
 
 /**
@@ -291,7 +292,7 @@ export async function sendTaskHandler(
   }: SendTaskArgs,
 ): Promise<SwarmToolResult> {
   const userLead = ctx.kind === "user" ? await getLeadAgent() : null;
-  if (ctx.kind === "user" && (!userLead || userLead.status === "offline")) {
+  if (ctx.kind === "user" && (!userLead || !(await isAgentReachable(userLead)))) {
     return toolErr("No online Lead is available. Start or register a Lead before sending a task.");
   }
 
@@ -355,7 +356,15 @@ export async function sendTaskHandler(
     });
   }
 
-  if (ctx.kind === "owner" && requestedAgentId === ctx.agentId) {
+  // The guard stops an agent session from handing work back to itself. A script runs as its
+  // owner (a scheduled script as the schedule's creator), so a Lead-owned poller that files
+  // work for the Lead is legitimate. The bridge marks script calls `script-sdk`; a caller that
+  // spoofs it can only send itself a task, which grants nothing it could not already do.
+  if (
+    ctx.kind === "owner" &&
+    requestedAgentId === ctx.agentId &&
+    ctx.requestInfo?.callOrigin !== "script-sdk"
+  ) {
     return toolErr("Cannot send a task to yourself, are you drunk?", {
       data: { yourAgentId: ctx.agentId },
     });
@@ -653,7 +662,7 @@ export async function sendTaskHandler(
       };
     }
 
-    if (ctx.kind === "user" && (!agent.isLead || agent.status === "offline")) {
+    if (ctx.kind === "user" && (!agent.isLead || !(await isAgentReachable(agent)))) {
       return {
         success: false,
         message: "The Lead is no longer online. No task was created.",

@@ -1,7 +1,9 @@
 import type { LiveModelsCatalog } from "@/lib/agent-runtime-models";
 import { getConfig } from "@/lib/config";
+import { DASHBOARD_USER_HEADER, dashboardUserIdFor } from "../lib/dashboard-user";
 import type {
   AcpRuntimeConfig,
+  Agent,
   AgentAvatar,
   AgentMcpServersResponse,
   AgentRuntimeInstancesResponse,
@@ -53,6 +55,7 @@ import type {
   FavoriteSetResponse,
   FavoritesResponse,
   FeedbackInput,
+  FleetBenchmarkResponse,
   IdentitiesResponse,
   IdentityEvent,
   IdentityEventsResponse,
@@ -81,6 +84,8 @@ import type {
   OAuthAuthorization,
   OAuthAuthorizeUrlResult,
   OAuthPreset,
+  PageFeedbackPayload,
+  PageFeedbackResult,
   PageListItem,
   PageMetadata,
   PagesListResponse,
@@ -93,6 +98,13 @@ import type {
   PromptTemplateHistory,
   ReasoningEffortLevel,
   ResolveUnmappedInput,
+  RuntimeController,
+  RuntimeControllerInput,
+  RuntimeControllerToken,
+  RuntimePool,
+  RuntimePoolCreateAgentInput,
+  RuntimePoolInput,
+  RuntimePoolRuntime,
   ScheduledTask,
   ScheduledTasksResponse,
   ScriptApiAuthMode,
@@ -122,6 +134,9 @@ import type {
   SkillFile,
   SkillFilesResponse,
   SkillsResponse,
+  SkillUsageDetail,
+  SkillUsageSummary,
+  SkillUsageWindow,
   Stats,
   SteeringMessage,
   SteeringMessagesResponse,
@@ -154,6 +169,7 @@ import type {
   WhoamiResponse,
   Workflow,
   WorkflowRun,
+  WorkflowRunParent,
   WorkflowRunStep,
   WorkflowRunSummary,
   WorkflowRunsPage,
@@ -277,6 +293,31 @@ export class ExtensionInstallError extends Error {
   }
 }
 
+/**
+ * A failed runtime pool or controller request. `status` lets the pool delete
+ * dialog offer a forced delete on 409 (the pool still has bound agents).
+ */
+export class RuntimePoolApiError extends Error {
+  readonly status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "RuntimePoolApiError";
+    this.status = status;
+  }
+}
+
+/** Parse a runtime pool route response or throw a `RuntimePoolApiError`. */
+async function runtimePoolResponse<T>(res: Response, label: string): Promise<T> {
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
+    throw new RuntimePoolApiError(
+      body.error || body.message || `${label} (${res.status})`,
+      res.status,
+    );
+  }
+  return (await res.json()) as T;
+}
+
 /** Unwrap the `{ extension }` envelope every extension lifecycle route answers with. */
 async function extractExtension(res: Response, label: string): Promise<Extension> {
   if (!res.ok) {
@@ -304,6 +345,12 @@ class ApiClient {
     };
     if (config.apiKey) {
       headers.Authorization = `Bearer ${config.apiKey}`;
+    }
+    // Per-user state (favorites) needs the picked dashboard user: the
+    // operator key alone names no person.
+    const dashboardUserId = dashboardUserIdFor(config);
+    if (dashboardUserId) {
+      headers[DASHBOARD_USER_HEADER] = dashboardUserId;
     }
     return headers;
   }
@@ -1421,9 +1468,13 @@ class ApiClient {
     const url = `${this.getBaseUrl()}/api/workflow-runs/${id}`;
     const res = await fetch(url, { headers: this.getHeaders() });
     if (!res.ok) throw new Error(`Failed to fetch workflow run: ${res.status}`);
-    const data = (await res.json()) as { run: WorkflowRun; steps: WorkflowRunStep[] };
-    // Reshape { run, steps } into WorkflowRunWithSteps
-    return { ...data.run, steps: data.steps };
+    const data = (await res.json()) as {
+      run: WorkflowRun;
+      steps: WorkflowRunStep[];
+      parent?: WorkflowRunParent;
+    };
+    // Reshape { run, steps, parent } into WorkflowRunWithSteps
+    return { ...data.run, steps: data.steps, parent: data.parent };
   }
 
   async fetchWorkflowVersions(workflowId: string): Promise<WorkflowVersion[]> {
@@ -1676,6 +1727,165 @@ class ApiClient {
     return extractExtension(res, "Failed to activate extension version");
   }
 
+  // ── Runtime pools ──
+
+  async fetchRuntimePools(): Promise<RuntimePool[]> {
+    const url = `${this.getBaseUrl()}/api/runtime-pools`;
+    const res = await fetch(url, { headers: this.getHeaders() });
+    const data = await runtimePoolResponse<{ pools: RuntimePool[] }>(
+      res,
+      "Failed to fetch runtime pools",
+    );
+    return data.pools;
+  }
+
+  async fetchRuntimePool(id: string): Promise<RuntimePool> {
+    const url = `${this.getBaseUrl()}/api/runtime-pools/${encodeURIComponent(id)}`;
+    const res = await fetch(url, { headers: this.getHeaders() });
+    const data = await runtimePoolResponse<{ pool: RuntimePool }>(
+      res,
+      "Failed to fetch runtime pool",
+    );
+    return data.pool;
+  }
+
+  async createRuntimePool(input: RuntimePoolInput): Promise<RuntimePool> {
+    const url = `${this.getBaseUrl()}/api/runtime-pools`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: this.getHeaders(),
+      body: JSON.stringify(input),
+    });
+    const data = await runtimePoolResponse<{ pool: RuntimePool }>(
+      res,
+      "Failed to create runtime pool",
+    );
+    return data.pool;
+  }
+
+  async updateRuntimePool(id: string, input: Partial<RuntimePoolInput>): Promise<RuntimePool> {
+    const url = `${this.getBaseUrl()}/api/runtime-pools/${encodeURIComponent(id)}`;
+    const res = await fetch(url, {
+      method: "PATCH",
+      headers: this.getHeaders(),
+      body: JSON.stringify(input),
+    });
+    const data = await runtimePoolResponse<{ pool: RuntimePool }>(
+      res,
+      "Failed to update runtime pool",
+    );
+    return data.pool;
+  }
+
+  /** `force` unbinds the pool's agents first; without it a bound pool answers 409. */
+  async deleteRuntimePool(id: string, force = false): Promise<void> {
+    const suffix = force ? "?force=true" : "";
+    const url = `${this.getBaseUrl()}/api/runtime-pools/${encodeURIComponent(id)}${suffix}`;
+    const res = await fetch(url, { method: "DELETE", headers: this.getHeaders() });
+    await runtimePoolResponse<{ deleted: true }>(res, "Failed to delete runtime pool");
+  }
+
+  async fetchRuntimePoolRuntimes(id: string): Promise<RuntimePoolRuntime[]> {
+    const url = `${this.getBaseUrl()}/api/runtime-pools/${encodeURIComponent(id)}/runtimes`;
+    const res = await fetch(url, { headers: this.getHeaders() });
+    const data = await runtimePoolResponse<{ runtimes: RuntimePoolRuntime[] }>(
+      res,
+      "Failed to fetch pool runtimes",
+    );
+    return data.runtimes;
+  }
+
+  /** Create an offline agent that is already bound to the pool. */
+  async createRuntimePoolAgent(id: string, input: RuntimePoolCreateAgentInput): Promise<Agent> {
+    const url = `${this.getBaseUrl()}/api/runtime-pools/${encodeURIComponent(id)}/agents`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: this.getHeaders(),
+      body: JSON.stringify(input),
+    });
+    const data = await runtimePoolResponse<{ agent: Agent }>(res, "Failed to create agent");
+    return data.agent;
+  }
+
+  /** Bind an agent to a pool, or unbind it with `poolId: null`. */
+  async bindAgentRuntimePool(agentId: string, poolId: string | null): Promise<Agent> {
+    const url = `${this.getBaseUrl()}/api/agents/${encodeURIComponent(agentId)}/runtime-pool`;
+    const res = await fetch(url, {
+      method: "PUT",
+      headers: this.getHeaders(),
+      body: JSON.stringify({ poolId }),
+    });
+    const data = await runtimePoolResponse<{ agent: Agent }>(res, "Failed to bind agent");
+    return data.agent;
+  }
+
+  async fetchRuntimeControllers(): Promise<RuntimeController[]> {
+    const url = `${this.getBaseUrl()}/api/runtime-controllers`;
+    const res = await fetch(url, { headers: this.getHeaders() });
+    const data = await runtimePoolResponse<{ controllers: RuntimeController[] }>(
+      res,
+      "Failed to fetch runtime controllers",
+    );
+    return data.controllers;
+  }
+
+  async fetchRuntimeController(id: string): Promise<RuntimeController> {
+    const url = `${this.getBaseUrl()}/api/runtime-controllers/${encodeURIComponent(id)}`;
+    const res = await fetch(url, { headers: this.getHeaders() });
+    const data = await runtimePoolResponse<{ controller: RuntimeController }>(
+      res,
+      "Failed to fetch runtime controller",
+    );
+    return data.controller;
+  }
+
+  async createRuntimeController(input: RuntimeControllerInput): Promise<RuntimeController> {
+    const url = `${this.getBaseUrl()}/api/runtime-controllers`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: this.getHeaders(),
+      body: JSON.stringify(input),
+    });
+    const data = await runtimePoolResponse<{ controller: RuntimeController }>(
+      res,
+      "Failed to create runtime controller",
+    );
+    return data.controller;
+  }
+
+  async updateRuntimeController(
+    id: string,
+    input: RuntimeControllerInput,
+  ): Promise<RuntimeController> {
+    const url = `${this.getBaseUrl()}/api/runtime-controllers/${encodeURIComponent(id)}`;
+    const res = await fetch(url, {
+      method: "PATCH",
+      headers: this.getHeaders(),
+      body: JSON.stringify(input),
+    });
+    const data = await runtimePoolResponse<{ controller: RuntimeController }>(
+      res,
+      "Failed to update runtime controller",
+    );
+    return data.controller;
+  }
+
+  async deleteRuntimeController(id: string): Promise<void> {
+    const url = `${this.getBaseUrl()}/api/runtime-controllers/${encodeURIComponent(id)}`;
+    const res = await fetch(url, { method: "DELETE", headers: this.getHeaders() });
+    await runtimePoolResponse<{ deleted: true }>(res, "Failed to delete runtime controller");
+  }
+
+  /** Mint a remote controller token. Revokes the previous token. The plaintext comes back once. */
+  async mintRuntimeControllerToken(id: string): Promise<RuntimeControllerToken> {
+    const url = `${this.getBaseUrl()}/api/runtime-controllers/${encodeURIComponent(id)}/token`;
+    const res = await fetch(url, { method: "POST", headers: this.getHeaders() });
+    return await runtimePoolResponse<RuntimeControllerToken>(
+      res,
+      "Failed to mint controller token",
+    );
+  }
+
   // ── Script connections ──
 
   async fetchScriptConnections(filters?: {
@@ -1735,6 +1945,16 @@ class ApiClient {
     if (!res.ok) {
       const error = await res.json().catch(() => ({ error: "Failed to update connection" }));
       throw new Error(error.error || `Failed to update connection: ${res.status}`);
+    }
+    return res.json();
+  }
+
+  async deleteScriptConnection(id: string): Promise<{ deleted: true; id: string }> {
+    const url = `${this.getBaseUrl()}/api/script-connections/${encodeURIComponent(id)}`;
+    const res = await fetch(url, { method: "DELETE", headers: this.getHeaders() });
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({ error: "Failed to delete connection" }));
+      throw new Error(error.error || `Failed to delete connection: ${res.status}`);
     }
     return res.json();
   }
@@ -2245,6 +2465,26 @@ class ApiClient {
     const url = `${this.getBaseUrl()}/api/skills/${id}`;
     const res = await fetch(url, { headers: this.getHeaders() });
     if (!res.ok) throw new Error(`Failed to fetch skill: ${res.status}`);
+    return res.json();
+  }
+
+  async fetchSkillUsage(window: SkillUsageWindow, tzOffset: number): Promise<SkillUsageSummary> {
+    const params = new URLSearchParams({ window, tzOffset: String(tzOffset) });
+    const url = `${this.getBaseUrl()}/api/skills/usage?${params}`;
+    const res = await fetch(url, { headers: this.getHeaders() });
+    if (!res.ok) throw new Error(`Failed to fetch skill usage: ${res.status}`);
+    return res.json();
+  }
+
+  async fetchSkillUsageDetail(
+    id: string,
+    window: SkillUsageWindow,
+    tzOffset: number,
+  ): Promise<SkillUsageDetail> {
+    const params = new URLSearchParams({ window, tzOffset: String(tzOffset) });
+    const url = `${this.getBaseUrl()}/api/skills/${id}/usage?${params}`;
+    const res = await fetch(url, { headers: this.getHeaders() });
+    if (!res.ok) throw new Error(`Failed to fetch skill usage: ${res.status}`);
     return res.json();
   }
 
@@ -3128,6 +3368,54 @@ class ApiClient {
     return data.item;
   }
 
+  // ─── Dashboard telemetry ──────────────────────────────────────────────────
+
+  /** Relay one catalogued dashboard event. The API drops it when telemetry is off. */
+  async sendUiEvent(event: string, properties: Record<string, unknown>): Promise<void> {
+    const url = `${this.getBaseUrl()}/api/telemetry/ui-event`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: this.getHeaders(),
+      body: JSON.stringify({ event, properties }),
+    });
+    if (!res.ok) throw new Error(`Failed to send telemetry event: ${res.status}`);
+  }
+
+  /** Turn telemetry on and apply it to the running server. */
+  async enableTelemetry(via: "banner" | "settings"): Promise<{ enabled: boolean }> {
+    const url = `${this.getBaseUrl()}/api/telemetry/enable`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: this.getHeaders(),
+      body: JSON.stringify({ via }),
+    });
+    if (!res.ok) throw new Error(`Failed to turn telemetry on: ${res.status}`);
+    return (await res.json()) as { enabled: boolean };
+  }
+
+  /** Grant or revoke the "used by" logo consent. */
+  async setUsedByConsent(granted: boolean): Promise<{ granted: boolean; changedAt: string }> {
+    const url = `${this.getBaseUrl()}/api/used-by`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: this.getHeaders(),
+      body: JSON.stringify({ granted }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: "" }));
+      throw new Error(err.error || `Failed to update the consent: ${res.status}`);
+    }
+    return (await res.json()) as { granted: boolean; changedAt: string };
+  }
+
+  /** This swarm against similar swarms (fleet percentiles from the telemetry proxy). */
+  async getFleetBenchmark(): Promise<FleetBenchmarkResponse> {
+    const url = `${this.getBaseUrl()}/api/fleet-benchmark`;
+    const res = await fetch(url, { headers: this.getHeaders() });
+    if (!res.ok) throw new Error(`Failed to load the fleet benchmark: ${res.status}`);
+    return (await res.json()) as FleetBenchmarkResponse;
+  }
+
   // ─── Credential-Missing Agents (Phase 6 ≥1.76.0) ──────────────────────────
 
   async listCredentialMissingAgents(): Promise<CredentialMissingAgent[]> {
@@ -3214,6 +3502,30 @@ class ApiClient {
       credentials: "include",
     });
     if (!res.ok) throw new Error(`launchPage ${id}: ${res.status}`);
+  }
+
+  /**
+   * Send the feedback overlay's element comments for a page (bearer-authed).
+   * The page iframe hands the comments to the SPA over postMessage, so the
+   * page itself never needs a viewer session to submit them.
+   */
+  async sendPageFeedback(id: string, payload: PageFeedbackPayload): Promise<PageFeedbackResult> {
+    const url = `${this.getBaseUrl()}/api/pages/${encodeURIComponent(id)}/feedback`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: this.getHeaders(),
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      let detail = "";
+      try {
+        detail = ((await res.json()) as { error?: string }).error ?? "";
+      } catch {
+        /* ignore */
+      }
+      throw new Error(`sendPageFeedback ${id}: ${res.status}${detail ? ` (${detail})` : ""}`);
+    }
+    return res.json();
   }
 
   /**

@@ -38,7 +38,8 @@ export type ModelSource =
   | "worker-env"
   | "tier-config"
   | "tier-default"
-  | "fallback:cli-unsupported";
+  | "fallback:cli-unsupported"
+  | "fallback:cli-unsupported:model";
 /** One row of `GET /api/models-catalog/tiers`: what a tier resolves to for a provider. */
 export interface ModelTierPreview {
   provider: string;
@@ -59,7 +60,7 @@ export interface ModelTierPreview {
 export { REASONING_EFFORT_LEVELS };
 export type { ReasoningEffortLevel };
 
-export type AcpTarget = "opencode" | "gemini" | "copilot" | "custom";
+export type AcpTarget = "opencode" | "gemini" | "copilot" | "qwen" | "kiro" | "goose" | "custom";
 
 export type ClaudeTransport = "cli" | "sdk";
 
@@ -174,11 +175,120 @@ export interface Agent {
   claudeTransport?: ClaudeTransport;
   /** Last heartbeat or activity (ISO). "Alive" in `/status` = within 5 min and not offline. */
   lastActivityAt?: string;
+  /** Runtime pool this agent is bound to. Absent on APIs without runtime pools. */
+  runtimePoolId?: string | null;
   createdAt: string;
   lastUpdatedAt: string;
 }
 
 export type RuntimeInstanceStatus = "active" | "offline";
+
+// ── Runtime pools (mirror RuntimePoolSchema / RuntimeControllerSchema in src/types.ts) ──
+
+export type RuntimeProviderKind = "static" | "docker" | "e2b" | "k8s";
+export type RuntimeDeliveryMode = "poll" | "push";
+export type RuntimePoolLifecycle = "idle" | "per-task";
+
+export interface RuntimeResources {
+  cpu?: number;
+  memoryMb?: number;
+}
+
+export interface RuntimeController {
+  id: string;
+  name: string;
+  kind: RuntimeProviderKind;
+  placement: "builtin" | "remote";
+  config: Record<string, string>;
+  /** Names of the stored secret keys. The API never returns secret values. */
+  secretConfigKeys: string[];
+  secretConfigError?: boolean;
+  status: "online" | "offline" | "unknown";
+  lastSeenAt: string | null;
+  lastError: string | null;
+  lastErrorAt: string | null;
+  createdBy: string | null;
+  updatedBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** `POST /api/runtime-controllers/{id}/token`. The plaintext is returned once and never stored. */
+export interface RuntimeControllerToken {
+  tokenId: string;
+  plaintext: string;
+  expiresAt: string;
+}
+
+export interface RuntimeControllerInput {
+  name?: string;
+  kind?: RuntimeProviderKind;
+  placement?: "builtin" | "remote";
+  config?: Record<string, string>;
+  /** Write-only. A `null` value deletes that key on update. */
+  secretConfig?: Record<string, string | null>;
+}
+
+export interface RuntimePoolInput {
+  name: string;
+  kind: RuntimeProviderKind;
+  placements: [string];
+  image: string | null;
+  lifecycle: RuntimePoolLifecycle;
+  idleMinutes: number | null;
+  slotsPerRuntime: number;
+  maxRuntimes: number | null;
+  minRuntimes: number;
+  delivery: RuntimeDeliveryMode | null;
+  env: Record<string, string>;
+  resources: RuntimeResources | null;
+  ttlSec: number | null;
+  enabled: boolean;
+}
+
+export interface RuntimePool extends RuntimePoolInput {
+  id: string;
+  resolvedImage: string | null;
+  consecutiveFailures: number;
+  circuitOpenUntil: string | null;
+  lastError: string | null;
+  lastErrorAt: string | null;
+  createdBy: string | null;
+  updatedBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** One runtime row from `GET /api/runtime-pools/{id}/runtimes` (RuntimeInstanceSchema). */
+export interface RuntimePoolRuntime {
+  id: string;
+  agentId: string;
+  status: "active" | "offline" | "provisioning";
+  poolId?: string | null;
+  controllerId?: string | null;
+  externalHandle?: Record<string, unknown> | null;
+  provisionAttempts?: number;
+  provisionError?: string | null;
+  provisionRequestedAt?: string | null;
+  draining?: boolean;
+  idleSince?: string | null;
+  leaseExpiresAt?: string | null;
+  taskId?: string | null;
+  reportedSlots: number;
+  credentialReady?: boolean | null;
+  metadata: Record<string, unknown> | null;
+  lastSeenAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RuntimePoolCreateAgentInput {
+  name: string;
+  isLead?: boolean;
+  harnessProvider?: ProviderName;
+  maxTasks?: number;
+  templateId?: string;
+}
 
 export interface RuntimeInstance {
   id: string;
@@ -1371,6 +1481,16 @@ export interface WorkflowRun {
   startedAt: string;
   lastUpdatedAt: string;
   finishedAt?: string;
+  /** The `sub-workflow` step that started this run. Unset on a top-level run. */
+  parentStepId?: string;
+}
+
+/** The run and `sub-workflow` step that started a child run. */
+export interface WorkflowRunParent {
+  runId: string;
+  workflowId: string;
+  stepId: string;
+  nodeId: string;
 }
 
 export type WorkflowRunStepStatus =
@@ -1403,6 +1523,7 @@ export interface WorkflowRunStep {
 
 export interface WorkflowRunWithSteps extends WorkflowRun {
   steps: WorkflowRunStep[];
+  parent?: WorkflowRunParent;
 }
 
 export interface WorkflowVersion {
@@ -2334,6 +2455,9 @@ export interface Skill {
   version: number;
   isEnabled: boolean;
   systemDefault: boolean;
+  /** All-time loads, at most one per runner session. */
+  invocationCount: number;
+  lastInvokedAt: string | null;
   createdAt: string;
   lastUpdatedAt: string;
   lastFetchedAt: string | null;
@@ -2373,6 +2497,107 @@ export interface SkillFile extends SkillFileManifestEntry {
 export interface SkillFilesResponse {
   files: SkillFileManifestEntry[];
   total: number;
+}
+
+// Skill usage (GET /api/skills/usage, GET /api/skills/:id/usage)
+export type SkillUsageWindow = "7d" | "30d" | "all";
+
+export interface SkillUsageDailyRow {
+  /** The viewer's local day (`YYYY-MM-DD`). */
+  date: string;
+  invocations: number;
+  skills: number;
+  tasks: number;
+}
+
+export interface SkillUsageCountRow {
+  key: string;
+  invocations: number;
+}
+
+export interface SkillUsageBySkillRow {
+  /** Null for a name that matches no skill row (a harness-native skill). */
+  skillId: string | null;
+  skillName: string;
+  invocations: number;
+  agents: number;
+  tokens: number;
+  lastInvokedAt: string;
+}
+
+export interface SkillUsageAgentRow {
+  agentId: string;
+  agentName: string;
+  isLead: boolean;
+  installed: number;
+  installedUsed: number;
+  skillsUsed: number;
+  invocations: number;
+  lastInvokedAt: string | null;
+}
+
+export interface SkillUsageUnusedRow {
+  id: string;
+  name: string;
+  scope: string;
+  type: string;
+  systemDefault: boolean;
+  installedEverywhere: boolean;
+  installedAgents: number;
+  invocationCount: number;
+  lastInvokedAt: string | null;
+}
+
+export interface SkillUsageSummary {
+  window: SkillUsageWindow;
+  since: string | null;
+  trackingSince: string | null;
+  generatedAt: string;
+  totals: {
+    invocations: number;
+    distinctSkills: number;
+    distinctAgents: number;
+    distinctTasks: number;
+    unresolved: number;
+    tokens: number;
+  };
+  taskAdoption: { tasks: number; tasksWithSkill: number; since: string | null };
+  daily: SkillUsageDailyRow[];
+  byHarness: SkillUsageCountRow[];
+  bySkill: SkillUsageBySkillRow[];
+  agents: SkillUsageAgentRow[];
+  unused: SkillUsageUnusedRow[];
+}
+
+export interface SkillUsageRecentRow {
+  id: string;
+  agentId: string | null;
+  agentName: string | null;
+  taskId: string | null;
+  taskTitle: string | null;
+  harness: string | null;
+  via: string | null;
+  skillVersion: number | null;
+  tokenCount: number | null;
+  createdAt: string;
+}
+
+export interface SkillUsageDetail {
+  skillId: string;
+  window: SkillUsageWindow;
+  since: string | null;
+  generatedAt: string;
+  totals: { invocations: number; distinctAgents: number; distinctTasks: number; tokens: number };
+  daily: SkillUsageDailyRow[];
+  byAgent: {
+    agentId: string;
+    agentName: string | null;
+    invocations: number;
+    lastInvokedAt: string;
+  }[];
+  byHarness: SkillUsageCountRow[];
+  byVia: SkillUsageCountRow[];
+  recent: SkillUsageRecentRow[];
 }
 
 // MCP Servers
@@ -2857,17 +3082,30 @@ export interface StatusTelemetry {
   enabled: boolean;
 }
 
+/** Counts behind the feedback pop-up triggers (`/status` `instance`). */
+export interface StatusInstance {
+  /** Oldest agent registration; the install-age anchor when telemetry is off. */
+  first_seen_at: string | null;
+  tasks_completed: number;
+  tasks_failed: number;
+  workflow_runs_completed: number;
+}
+
 export interface FeedbackInput {
   submission_id: string;
   user_id: string;
-  install_id: string | null;
-  installed_at: string | null;
-  org_name: string;
+  /** Left out when telemetry is off: such an install has no ID to send. */
+  install_id?: string;
+  installed_at?: string | null;
+  /** Left out when telemetry is off, unless the user opts to include it. */
+  org_name?: string;
   swarm_version: string;
   name?: string;
   email?: string;
   newsletter_consent: boolean;
-  nps?: 1 | 2 | 3 | 4 | 5;
+  /** 0-10 with `scale: "0-10"`; older clients sent 1-5 with no scale. */
+  nps?: number;
+  scale?: "0-10";
   message?: string;
   submitted_at: string;
 }
@@ -2973,6 +3211,10 @@ export interface StatusResponse {
   health: StatusHealth;
   /** Absent when the dashboard talks to an older API; treat absence as enabled. */
   telemetry?: StatusTelemetry;
+  /** Absent on APIs without runtime pools; treat absence as disabled. */
+  runtime_pools?: { enabled: boolean };
+  /** Absent on servers that predate it. */
+  instance?: StatusInstance;
 }
 
 export interface TestConnectionResponse {
@@ -2999,6 +3241,29 @@ export interface PageMetadata {
   contentType: PageContentType;
   authMode: PageAuthMode;
   body: string;
+}
+
+/** Body of `POST /api/pages/:id/feedback`, as collected by the in-page feedback overlay. */
+export interface PageFeedbackPayload {
+  pageUrl?: string;
+  note?: string;
+  comments: Array<{
+    selector: string;
+    comment: string;
+    tagName?: string;
+    text?: string;
+    html?: string;
+  }>;
+  /** Session-panel context key, `task:ui:page:<id or slug>:<uuid>`. */
+  contextKey?: string;
+  requestedByUserId?: string;
+}
+
+export interface PageFeedbackResult {
+  taskId: string;
+  status: string;
+  agentId: string | null;
+  task_url: string;
 }
 
 /**
@@ -3531,4 +3796,38 @@ export interface CodexDevicePollResponse {
   status: "pending" | "complete" | "failed" | "expired";
   slot?: number;
   error?: string;
+}
+
+// ─── Fleet benchmark (`GET /api/fleet-benchmark`) ───────────────────────────
+
+export type FleetBenchmarkState =
+  | "ready"
+  | "telemetry_off"
+  | "no_org_name"
+  | "not_enough_tasks"
+  | "unavailable";
+export type FleetBucket = "1" | "2-5" | "6+";
+export type FleetBand = "top_10" | "top_25" | "above_median" | "below_median" | "bottom_25";
+
+export interface FleetComparison {
+  key: "tasksPerWeek" | "taskSuccessRate";
+  value: number;
+  p50: number;
+  band: FleetBand;
+  peers: FleetBucket | "all";
+  installs: number;
+}
+
+export interface FleetBenchmarkResponse {
+  state: FleetBenchmarkState;
+  local: {
+    tasksPerWeek: number;
+    taskSuccessRate: number | null;
+    finishedTasks: number;
+    agents: number;
+    bucket: FleetBucket | null;
+  } | null;
+  minFinishedTasks: number;
+  generatedAt: string | null;
+  comparisons: FleetComparison[];
 }

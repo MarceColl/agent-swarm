@@ -297,7 +297,11 @@ async function removeDbFiles() {
   }
 }
 
+let originalCombEnabled: string | undefined;
+
 beforeAll(() => {
+  originalCombEnabled = process.env.COMB_ENABLED;
+  delete process.env.COMB_ENABLED;
   process.env.APP_URL = "https://app.agent-swarm.dev";
   process.env.SLACK_RENDER_V2 = "true";
 });
@@ -330,6 +334,8 @@ beforeEach(async () => {
 });
 
 afterAll(async () => {
+  if (originalCombEnabled === undefined) delete process.env.COMB_ENABLED;
+  else process.env.COMB_ENABLED = originalCombEnabled;
   _resetSlackRenderV2ForTests();
   closeDb();
   await removeDbFiles();
@@ -2517,7 +2523,7 @@ describe("Slack renderer v2", () => {
       (call) => call.method === "chat.update" && call.payload.ts === card?.ts,
     );
     expect(rewrite?.payload.text).toBe(
-      `↪️ Resumed by ${lead.name} and deferred again — ${nextCard?.permalink}`,
+      `↪️ Resumed by ${lead.name} and deferred again — <${nextCard?.permalink}|next update>`,
     );
   });
 
@@ -3653,7 +3659,9 @@ describe("Slack renderer v2 delegation (SLACK_RENDER_V2_DELEGATION)", () => {
         String(call.payload.markdown_text).includes("**Results**"),
     );
     expect(conclusionStream).toBeDefined();
-    expect(String(conclusionStream?.payload.markdown_text)).toContain(childCard!.permalink);
+    expect(String(conclusionStream?.payload.markdown_text)).toContain(
+      `↳ ✅ ${worker.name} — [result](${childCard!.permalink})`,
+    );
     expect(calls).toContainEqual({
       method: "reactions.add",
       payload: { channel: channelId, name: "white_check_mark", timestamp: triggerTs },

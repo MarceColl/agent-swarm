@@ -45,6 +45,9 @@ const STUB_BINARIES = [
   "opencode",
   "gemini",
   "copilot",
+  "qwen",
+  "kiro-cli",
+  "goose",
   "dsh",
   "acp-target-stub",
   "acp target stub",
@@ -172,6 +175,40 @@ describe("docker-entrypoint.sh: acp target binary verification", () => {
     CHILD_PROCESS_TEST_BUDGET_MS,
   );
 
+  for (const [target, binary, hint] of [
+    ["qwen", "qwen", "npm install -g @qwen-code/qwen-code"],
+    ["kiro", "kiro-cli", "https://cli.kiro.dev/install"],
+    ["goose", "goose", "goose-docs.ai"],
+  ] as const) {
+    test(
+      `resolves the ${target} catalog target to the ${binary} binary`,
+      async () => {
+        const result = await runChain({ HARNESS_PROVIDER: "acp", ACP_TARGET: target });
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).toContain(`ACP target: `);
+        expect(result.stdout).toContain(`/${binary} (ACP_TARGET='${target}')`);
+      },
+      CHILD_PROCESS_TEST_BUDGET_MS,
+    );
+
+    test(
+      `fails boot with an install hint when the ${binary} binary is missing`,
+      async () => {
+        const result = await runChain({
+          HARNESS_PROVIDER: "acp",
+          ACP_TARGET: target,
+          PATH: "/usr/bin:/bin",
+        });
+
+        expect(result.exitCode).not.toBe(0);
+        expect(result.stdout).toContain(`FATAL: ACP target binary not found: '${binary}'`);
+        expect(result.stdout).toContain(hint);
+      },
+      CHILD_PROCESS_TEST_BUDGET_MS,
+    );
+  }
+
   test(
     "resolves a custom target supplied as a command string with argv",
     async () => {
@@ -221,7 +258,7 @@ describe("docker-entrypoint.sh: acp target binary verification", () => {
 
       expect(result.exitCode).not.toBe(0);
       expect(result.stdout).toContain(
-        "FATAL: unsupported ACP target 'gemini-cli'. Supported targets: opencode, gemini, copilot, custom.",
+        "FATAL: unsupported ACP target 'gemini-cli'. Supported targets: opencode, gemini, copilot, qwen, kiro, goose, custom.",
       );
     },
     CHILD_PROCESS_TEST_BUDGET_MS,
@@ -356,7 +393,6 @@ describe("docker-entrypoint.sh: provider binary chain contract", () => {
   test.each([
     ["claude", "Claude CLI:"],
     ["codex", "Codex CLI:"],
-    ["opencode", "opencode CLI:"],
     ["dsh", "dsh CLI:"],
     ["claude-managed", "no local CLI required"],
     ["devin", "cloud API"],
@@ -367,6 +403,25 @@ describe("docker-entrypoint.sh: provider binary chain contract", () => {
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain(expected);
+    },
+    CHILD_PROCESS_TEST_BUDGET_MS,
+  );
+
+  test(
+    "checks the opencode branch for the in-process SDK, not a CLI",
+    async () => {
+      const sdkPath = join(getStubDir(), "opencode-sdk-index.js");
+      writeFileSync(sdkPath, "");
+      const found = await runChain({ HARNESS_PROVIDER: "opencode", OPENCODE_SDK_PATH: sdkPath });
+      expect(found.exitCode).toBe(0);
+      expect(found.stdout).toContain(`OpenCode SDK: ${sdkPath}`);
+
+      const missing = await runChain({
+        HARNESS_PROVIDER: "opencode",
+        OPENCODE_SDK_PATH: join(getStubDir(), "no-such-sdk.js"),
+      });
+      expect(missing.exitCode).not.toBe(0);
+      expect(missing.stdout).toContain("FATAL: @opencode/sdk not found");
     },
     CHILD_PROCESS_TEST_BUDGET_MS,
   );

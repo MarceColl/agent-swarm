@@ -330,17 +330,26 @@ elif [ "$HARNESS_PROVIDER" = "claude-managed" ]; then
 elif [ "$HARNESS_PROVIDER" = "devin" ]; then
     echo "Devin: cloud API (no local binary required)"
 elif [ "$HARNESS_PROVIDER" = "opencode" ]; then
-    OPENCODE_BIN="${OPENCODE_BINARY:-opencode}"
-    if ! command -v "$OPENCODE_BIN" > /dev/null 2>&1; then
-        echo "FATAL: opencode CLI not found: '$OPENCODE_BIN'"
-        echo "  PATH=$PATH"
+    # OpenCode 2 runs in-process from the globally installed @opencode/sdk
+    # (same lookup as resolveOpencodeSdkSpecifier in opencode-adapter.ts).
+    OPENCODE_SDK_ENTRY="${OPENCODE_SDK_PATH:-}"
+    if [ -z "$OPENCODE_SDK_ENTRY" ]; then
+        for root in /usr/lib/node_modules /usr/local/lib/node_modules; do
+            if [ -f "$root/@opencode/sdk/dist/index.js" ]; then
+                OPENCODE_SDK_ENTRY="$root/@opencode/sdk/dist/index.js"
+                break
+            fi
+        done
+    fi
+    if [ -z "$OPENCODE_SDK_ENTRY" ] || [ ! -f "$OPENCODE_SDK_ENTRY" ]; then
+        echo "FATAL: @opencode/sdk not found. Install it with 'npm install -g @opencode/sdk' or set OPENCODE_SDK_PATH."
         exit 1
     fi
-    echo "opencode CLI: $(command -v "$OPENCODE_BIN")"
+    echo "OpenCode SDK: $OPENCODE_SDK_ENTRY"
 elif [ "$HARNESS_PROVIDER" = "dsh" ]; then
     DSH_BIN="${DSH_BINARY:-dsh}"
     if ! command -v "$DSH_BIN" >/dev/null 2>&1; then
-        echo "FATAL: dsh CLI not found: '$DSH_BIN'. Use worker-full or install @deepseek-ai/dsh@0.2.1-alpha.1 during image provisioning."
+        echo "FATAL: dsh CLI not found: '$DSH_BIN'. Use worker-full or install @deepseek-ai/dsh@0.2.1-alpha.2 during image provisioning."
         exit 1
     fi
     echo "dsh CLI: $(command -v "$DSH_BIN")"
@@ -354,7 +363,7 @@ elif [ "$HARNESS_PROVIDER" = "amp" ]; then
 elif [ "$HARNESS_PROVIDER" = "grok" ]; then
     GROK_BIN="${GROK_BINARY:-grok}"
     if ! command -v "$GROK_BIN" >/dev/null 2>&1; then
-        echo "FATAL: grok CLI not found: '$GROK_BIN'. Use worker-full or install @xai-official/grok@1.0.50 during image provisioning."
+        echo "FATAL: grok CLI not found: '$GROK_BIN'. Use worker-full or install @xai-official/grok@1.0.52 during image provisioning."
         exit 1
     fi
     echo "grok CLI: $(command -v "$GROK_BIN") ($(GROK_DISABLE_AUTOUPDATER=1 "$GROK_BIN" --version 2>/dev/null))"
@@ -390,6 +399,19 @@ elif [ "$HARNESS_PROVIDER" = "acp" ]; then
             echo "  PATH=$PATH"
             exit 1
         fi
+    elif [ "$ACP_TARGET_ID" = "qwen" ] || [ "$ACP_TARGET_ID" = "kiro" ] || [ "$ACP_TARGET_ID" = "goose" ]; then
+        # Catalog commands: `qwen --acp`, `kiro-cli acp`, `goose acp`. The full
+        # image bakes all three; a slim or custom image must install them itself.
+        case "$ACP_TARGET_ID" in
+            qwen) ACP_BIN="qwen"; ACP_INSTALL_HINT="npm install -g @qwen-code/qwen-code" ;;
+            kiro) ACP_BIN="kiro-cli"; ACP_INSTALL_HINT="curl -fsSL https://cli.kiro.dev/install | bash" ;;
+            goose) ACP_BIN="goose"; ACP_INSTALL_HINT="see https://goose-docs.ai/docs/getting-started/installation" ;;
+        esac
+        if ! command -v "$ACP_BIN" > /dev/null 2>&1; then
+            echo "FATAL: ACP target binary not found: '$ACP_BIN' (ACP_TARGET='$ACP_TARGET_ID'). Install it: $ACP_INSTALL_HINT"
+            echo "  PATH=$PATH"
+            exit 1
+        fi
     elif [ "$ACP_TARGET_ID" = "custom" ]; then
         if [ -n "${ACP_TARGET_COMMAND+set}" ]; then
             ACP_BIN="$ACP_TARGET_COMMAND"
@@ -419,7 +441,7 @@ elif [ "$HARNESS_PROVIDER" = "acp" ]; then
             ACP_BIN=$(printf '%s' "$ACP_BIN" | awk '{print $1}')
         fi
     else
-        echo "FATAL: unsupported ACP target '$ACP_TARGET_ID'. Supported targets: opencode, gemini, copilot, custom."
+        echo "FATAL: unsupported ACP target '$ACP_TARGET_ID'. Supported targets: opencode, gemini, copilot, qwen, kiro, goose, custom."
         echo "  PATH=$PATH"
         exit 1
     fi

@@ -44,7 +44,7 @@ import type {
  * default; the image installs exactly this version and the per-task settings
  * set `amp.updates.mode: "disabled"`. Bump it deliberately, with a live run.
  */
-export const AMP_PACKAGE = "@ampcode/cli@0.0.1791518547-g6aa292";
+export const AMP_PACKAGE = "@ampcode/cli@0.0.1791950451-g165091";
 
 /** MCP server name. Amp exposes its tools as `agent_swarm` / `store_progress` (dashes become underscores). */
 const AMP_MCP_SERVER_NAME = "agent-swarm";
@@ -537,7 +537,7 @@ class AmpSession implements ProviderSession {
   }
 
   private get stdin(): AmpStdin {
-    return this.proc.stdin as unknown as AmpStdin;
+    return this.proc.stdin as AmpStdin;
   }
 
   private async writeInput(text: string): Promise<void> {

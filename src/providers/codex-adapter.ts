@@ -37,6 +37,7 @@ import {
   clampContextPercent,
   computeContextUsedUnified,
 } from "../utils/context-window";
+import { isEnvFlagEnabled } from "../utils/env-flag";
 import { SessionErrorTracker } from "../utils/error-tracker";
 import { summarizeSession as runSummarize } from "../utils/internal-ai";
 import { getMemoryRaterNames } from "../utils/memory-raters";
@@ -541,7 +542,7 @@ export async function buildCodexConfig(
   // context-compression tools. Gated by `CONTEXT_MODE_DISABLED` so builds /
   // deploys without the `context-mode` binary on PATH don't break the session.
   // Same entry shape as the swarm + installed-server stdio entries above.
-  if (process.env.CONTEXT_MODE_DISABLED !== "true") {
+  if (!isEnvFlagEnabled("CONTEXT_MODE_DISABLED", false)) {
     mcpServers["context-mode"] = {
       command: "context-mode",
       enabled: true,
@@ -1340,6 +1341,9 @@ export class CodexSession implements ProviderSession {
             toolCallId: item.id,
             toolName: this.toolNameForItem(item),
             result: item,
+            ...(item.type === "command_execution"
+              ? { isError: item.exit_code !== 0 || item.status === "failed" }
+              : {}),
           });
           this.transcript.push(
             `Tool[${this.toolNameForItem(item)}] completed: ${this.shortenItemResult(item)}`,

@@ -5,7 +5,6 @@ import {
 } from "../be/approval-sweeps";
 import { deleteExpiredConnectorCodes } from "../be/connector-codes";
 import {
-  assignUnassignedTaskPending,
   backfillSupersedeTaskResumeTaskId,
   buildRoutingAffinityFromAgent,
   cascadeFailDependents,
@@ -39,7 +38,6 @@ import {
   hasPendingSteering,
   isAgentEligibleForTask,
   isPoolAffinityEnforcementEnabled,
-  MAX_EMPTY_POLLS,
   promoteAbandonedDraftTasks,
   releaseStaleMentionProcessing,
   releaseStaleOfferedTasksForOfflineAgents,
@@ -52,10 +50,14 @@ import {
 import { repointTrackerSyncBySwarmId } from "../be/db-queries/tracker";
 import { poolTaskRunsOnHarness } from "../be/model-validation";
 import {
-  agentsWithLiveRuntime,
   countActiveRuntimeInstancesForAgent,
   expireStaleRuntimeInstances,
 } from "../be/multi-runtime";
+import { isAgentReachable } from "../be/runtime-pools/reachability";
+import { remediateStalledRuntime } from "../be/runtime-pools/recovery";
+import { routePoolTasks } from "../be/runtime-pools/routing";
+import { getScript } from "../be/scripts/db";
+import { runSavedScriptAsAgent } from "../be/scripts/run-saved";
 import { promotePendingSteeringForTask } from "../be/steering";
 import type { HeartbeatAction, HeartbeatClassification } from "../extensions/contract";
 import { dispatchPre, extensionIdForAgent } from "../extensions/dispatcher";
@@ -67,6 +69,7 @@ import {
   getNextResumeGeneration,
   getPinCandidateAgent,
   getResumeGeneration,
+  inheritedModelSelection,
   REBOOT_RETRY_PIN_TAG,
   resolveLeadOnlyRecoveryAssignment,
 } from "../tasks/worker-follow-up";
@@ -143,29 +146,6 @@ const STALE_CLEANUP_THRESHOLD_MINUTES = Number(process.env.HEARTBEAT_STALE_CLEAN
  * mid-upload) to its owner within one coffee break, not half an hour.
  */
 const DRAFT_TASK_TIMEOUT_MINUTES = Number(process.env.HEARTBEAT_DRAFT_TASK_TIMEOUT_MIN) || 5;
-
-/** Max pool tasks to auto-assign per sweep */
-function maxAutoAssignPerSweep(): number {
-  const raw = process.env.HEARTBEAT_MAX_AUTO_ASSIGN?.trim();
-  if (!raw) return 5;
-  const n = Number(raw);
-  // 0 is a valid operator choice ("assign nothing this sweep") and the config
-  // validator accepts it — the usual `Number(...) || 5` idiom would silently
-  // turn it back into the default.
-  return Number.isInteger(n) && n >= 0 ? n : 5;
-}
-
-/**
- * Page size for `autoAssignPoolTasks`' paginated pool scan and the hard cap on
- * total rows scanned per sweep. A single bounded fetch used to mean N
- * ineligible affinity-tagged tasks at the head of the priority order could
- * hide all eligible work behind them indefinitely (see PR #954 review) — the
- * scan now pages through the pool until it has assigned `MAX_AUTO_ASSIGN_PER_SWEEP`
- * tasks or exhausted the pool, capped so a pool full of ineligible tasks can't
- * turn every sweep into an unbounded scan.
- */
-const POOL_SCAN_BATCH_SIZE = Number(process.env.HEARTBEAT_POOL_SCAN_BATCH_SIZE) || 50;
-const POOL_SCAN_CAP = Number(process.env.HEARTBEAT_POOL_SCAN_CAP) || 500;
 
 /** Max crash-recovery resume generations before failing for lead triage */
 export function maxResumeGenerations(): number {
@@ -257,6 +237,31 @@ function isBootTriageAlways(): boolean {
   return isEnvFlagEnabled("HEARTBEAT_BOOT_TRIAGE_ALWAYS", false);
 }
 
+/**
+ * Wall-clock ceiling for the whole checklist gate call: script lookup,
+ * credential setup, and execution.
+ */
+const HEARTBEAT_CHECKLIST_GATE_TIMEOUT_MS = 60_000;
+let checklistGateTimeoutMs = HEARTBEAT_CHECKLIST_GATE_TIMEOUT_MS;
+
+/**
+ * Name of a global-scope script that decides whether a checklist tick needs
+ * the Lead. Unset or empty turns the gate off.
+ */
+function heartbeatChecklistGateScript(): string | null {
+  return process.env.HEARTBEAT_CHECKLIST_GATE_SCRIPT?.trim() || null;
+}
+
+/**
+ * `shadow` (default) runs the gate and only tags the checklist task with its
+ * verdict. `enforce` skips the task when the gate reports a quiet tick.
+ */
+function heartbeatChecklistGateMode(): "shadow" | "enforce" {
+  return process.env.HEARTBEAT_CHECKLIST_GATE_MODE?.trim().toLowerCase() === "enforce"
+    ? "enforce"
+    : "shadow";
+}
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -320,6 +325,23 @@ export function setBeforeHeartbeatSupersedeForTests(
   hook: ((task: AgentTask) => void | Promise<void>) | null,
 ): void {
   beforeHeartbeatSupersedeForTests = hook;
+}
+
+type ChecklistGateRunner = (
+  scriptName: string,
+  leadAgentId: string,
+  signal: AbortSignal,
+) => Promise<unknown>;
+let checklistGateRunnerForTests: ChecklistGateRunner | null = null;
+
+/** Replace the gate script runner. The runner returns the script's result or throws. */
+export function setChecklistGateRunnerForTests(runner: ChecklistGateRunner | null): void {
+  checklistGateRunnerForTests = runner;
+}
+
+/** Override the gate deadline. `null` restores the 60s default. */
+export function setChecklistGateTimeoutMsForTests(ms: number | null): void {
+  checklistGateTimeoutMs = ms ?? HEARTBEAT_CHECKLIST_GATE_TIMEOUT_MS;
 }
 
 // ============================================================================
@@ -394,7 +416,8 @@ export async function codeLevelTriage(): Promise<HeartbeatFindings> {
   // offer stuck on a dead offeree is otherwise invisible to
   // autoAssignPoolTasks (unassigned-only) and to the offeree's own
   // accept/reject path (nobody left to reach it). See #1190.
-  findings.staleCleanup.staleOfferedTasks = await releaseStaleOfferedTasksForOfflineAgents();
+  findings.staleCleanup.staleOfferedTasks =
+    await releaseStaleOfferedTasksForOfflineAgents(isAgentReachable);
 
   // 1. Detect and remediate stalled tasks (tiered: auto-fail dead workers)
   await detectAndRemediateStalledTasks(findings);
@@ -545,7 +568,21 @@ async function detectAndRemediateStalledTasks(findings: HeartbeatFindings): Prom
       continue;
     }
 
-    await remediateCrashedWorkerTask(findings, task, remediationOpts, proposed);
+    const opts = remediationOpts;
+    const decision = proposed;
+    if (
+      session?.runtimeInstanceId &&
+      (await remediateStalledRuntime(session.runtimeInstanceId, decision.reason, (fence) =>
+        remediateCrashedWorkerTask(
+          findings,
+          task,
+          { ...opts, cleanupActiveSession: true, onRemediated: fence },
+          decision,
+        ),
+      ))
+    )
+      continue;
+    await remediateCrashedWorkerTask(findings, task, opts, decision);
   }
 }
 
@@ -638,6 +675,22 @@ interface RemediationOptions {
   legacyFailReason: string;
   shortLabel: string;
   cleanupActiveSession?: boolean;
+  onRemediated?: () => Promise<void>;
+}
+
+export async function remediateTaskForDeadRuntime(task: AgentTask, reason: string): Promise<void> {
+  const opts: RemediationOptions = {
+    supersedeReason: scrubSecrets(`Runtime died: ${reason}`),
+    legacyFailReason: scrubSecrets(`Runtime died: ${reason}`),
+    shortLabel: "runtime-died",
+    cleanupActiveSession: true,
+  };
+  await remediateCrashedWorkerTask(
+    { autoFailedTasks: [], autoResumedTasks: [], pinnedResumes: [] },
+    task,
+    opts,
+    await defaultRemediationDecision(task, opts),
+  );
 }
 
 /**
@@ -648,12 +701,12 @@ interface RemediationOptions {
  * workflow ownership, excluded task types, idempotency, and resume-budget behavior.
  */
 async function remediateCrashedWorkerTask(
-  findings: HeartbeatFindings,
+  findings: Pick<HeartbeatFindings, "autoFailedTasks" | "autoResumedTasks" | "pinnedResumes">,
   task: AgentTask,
   opts: RemediationOptions,
   decision: RemediationDecision,
-): Promise<void> {
-  if (!task.agentId) return; // Type guard — caller already checked.
+): Promise<boolean> {
+  if (!task.agentId) return false;
 
   if (decision.action === "fail") {
     // CAS on the lastUpdatedAt this sweep read: progress since then wins.
@@ -661,6 +714,7 @@ async function remediateCrashedWorkerTask(
       expectedLastUpdatedAt: task.lastUpdatedAt,
     });
     if (failed) {
+      await opts.onRemediated?.();
       findings.autoFailedTasks.push({
         taskId: task.id,
         agentId: task.agentId,
@@ -673,7 +727,7 @@ async function remediateCrashedWorkerTask(
       const remaining = await getActiveTaskCount(task.agentId);
       if (remaining === 0) await restoreAgentIdleAfterRemediation(task.agentId);
     }
-    return;
+    return failed !== null;
   }
 
   await beforeHeartbeatSupersedeForTests?.(task);
@@ -685,8 +739,9 @@ async function remediateCrashedWorkerTask(
     expectedLastUpdatedAt: task.lastUpdatedAt,
   });
   if (!superseded) {
-    return;
+    return false;
   }
+  await opts.onRemediated?.();
 
   try {
     await promotePendingSteeringForTask(
@@ -750,6 +805,7 @@ async function remediateCrashedWorkerTask(
 
   const remaining = await getActiveTaskCount(task.agentId);
   if (remaining === 0) await restoreAgentIdleAfterRemediation(task.agentId);
+  return true;
 }
 
 /**
@@ -958,6 +1014,8 @@ export async function runRebootSweep(): Promise<void> {
               // onCompleted/onFailed.
               inheritParentFollowUpConfig: true,
               routingAffinity,
+              // Same work: a task-level model pin must survive the retry.
+              ...inheritedModelSelection(task),
             });
             if (authorization.decision) {
               await createLogEntry({
@@ -1088,100 +1146,8 @@ async function checkWorkerHealth(findings: HeartbeatFindings): Promise<void> {
   }
 }
 
-/**
- * Auto-assign unassigned pool tasks to idle workers with capacity.
- * Leaves tasks pending so the assigned worker's normal poll dispatches them.
- *
- * Routing affinity (Phase 3): per-task filtering, not blind round-robin — for
- * each pool task (in priority/creation order), pick the first idle worker
- * that both has remaining capacity AND satisfies `isAgentEligibleForTask`.
- * A task with no eligible worker this sweep is left `unassigned` (queued);
- * it either gets picked up on a later sweep once a matching worker frees up,
- * or is escalated to the Lead by `escalateStarvedPoolTasks` once it's been
- * stale long enough with zero eligible agents at all.
- *
- * The pool scan itself is paginated (Phase 3.1): a single bounded fetch of
- * `MAX_AUTO_ASSIGN_PER_SWEEP` tasks used to mean that if the highest-priority
- * rows were all affinity-tagged for a role with no idle match this sweep,
- * lower-priority eligible work behind them was never even looked at — it
- * would starve indefinitely regardless of how many sweeps ran, since the same
- * ineligible head-of-line rows were re-fetched every time. This now pages
- * through the pool in `POOL_SCAN_BATCH_SIZE` windows until it has assigned
- * `MAX_AUTO_ASSIGN_PER_SWEEP` tasks or exhausted the pool (capped at
- * `POOL_SCAN_CAP` rows scanned).
- */
 async function autoAssignPoolTasks(findings: HeartbeatFindings): Promise<void> {
-  await getDbClient().transaction(async () => {
-    // Skip idle workers whose accumulated empty-poll count has hit the gate;
-    // assigning to them would just have them exit on their next poll. Filter on
-    // the rows already returned (emptyPollCount is populated) rather than
-    // re-querying per worker via shouldBlockPolling().
-    // A multi-runtime agent whose runtimes have all died still reads as idle
-    // until its rows expire; assigning to it would strand the task, since
-    // nothing is left to poll for it.
-    // While the mode is on, only an agent with a live runtime can poll, so
-    // anything else — dead runtimes, or a worker that has not re-registered
-    // since the flag was enabled — would have the task stranded on it. With
-    // the flag off this is inert: legacy workers stop refreshing their
-    // retained rows, and filtering on them would park tasks on healthy agents.
-    const multiRuntime = isMultiRuntimeEnabled();
-    const withLiveRuntime = multiRuntime ? await agentsWithLiveRuntime() : null;
-    const idleWorkers = (await getIdleWorkersWithCapacity()).filter(
-      (w) =>
-        (w.emptyPollCount ?? 0) < MAX_EMPTY_POLLS &&
-        (withLiveRuntime === null || withLiveRuntime.has(w.id)),
-    );
-    if (idleWorkers.length === 0) return;
-
-    const reservedByWorker = new Map<string, number>();
-    const reservedForWorker = async (agentId: string): Promise<number> => {
-      const cached = reservedByWorker.get(agentId);
-      if (cached !== undefined) return cached;
-      const row = await getDbClient().get<{ count: number }>(
-        "SELECT COUNT(*) as count FROM agent_tasks WHERE agentId = ? AND status IN ('pending', 'in_progress')",
-        [agentId],
-      );
-      const reserved = row?.count ?? 0;
-      reservedByWorker.set(agentId, reserved);
-      return reserved;
-    };
-
-    let assignedCount = 0;
-    let offset = 0;
-
-    while (assignedCount < maxAutoAssignPerSweep() && offset < POOL_SCAN_CAP) {
-      const batch = await getUnassignedPoolTasks(POOL_SCAN_BATCH_SIZE, offset);
-      if (batch.length === 0) break;
-
-      for (const task of batch) {
-        if (assignedCount >= maxAutoAssignPerSweep()) break;
-
-        let worker: (typeof idleWorkers)[number] | undefined;
-        for (const w of idleWorkers) {
-          if (
-            (await reservedForWorker(w.id)) < (w.maxTasks ?? 1) &&
-            isAgentEligibleForTask(w, task) &&
-            // A pinned model from another harness family waits for a compatible worker.
-            (await poolTaskRunsOnHarness(task, w.harnessProvider ?? w.provider ?? null))
-          ) {
-            worker = w;
-            break;
-          }
-        }
-        if (!worker) continue; // No eligible worker with capacity this sweep — leave queued.
-
-        const assigned = await assignUnassignedTaskPending(task.id, worker.id);
-        if (assigned) {
-          findings.autoAssigned.push({ taskId: task.id, agentId: worker.id });
-          reservedByWorker.set(worker.id, (await reservedForWorker(worker.id)) + 1);
-          assignedCount++;
-        }
-      }
-
-      offset += batch.length;
-      if (batch.length < POOL_SCAN_BATCH_SIZE) break; // Exhausted the pool.
-    }
-  });
+  findings.autoAssigned.push(...(await routePoolTasks({})));
 }
 
 /**
@@ -1204,14 +1170,10 @@ async function escalateUnreclaimedResumes(findings: HeartbeatFindings): Promise<
   const stale = await getStalePinnedResumes(HEARTBEAT_RESUME_PIN_GRACE_MIN);
   if (stale.length === 0) return;
 
-  // A non-offline Lead is required to re-delegate. Without one (none registered,
-  // or the only lead is `offline` after POST /close), leave escalation candidates
-  // `pending` rather than cancel the pin and hand the decision to an agent that
-  // can't poll it (which would strand the work). The budget-exhaustion path below
-  // is independent of the Lead and still runs. `getLeadAgent` already prefers a
-  // non-offline lead, so this also guards the createRerouteDecisionTask assignment.
+  // A reachable Lead is required to re-delegate. Sleeping pool Leads can wake.
+  // Without one, keep the pin pending. The generation cap still applies below.
   const lead = await getLeadAgent();
-  const hasLead = lead != null && lead.status !== "offline";
+  const hasLead = lead != null && (await isAgentReachable(lead));
 
   for (const resume of stale) {
     if (!resume.parentTaskId) continue; // Defensive — resumes always have a parent.
@@ -1627,7 +1589,7 @@ async function getOrphanedPendingOrOfferedTasks(
       const holderId = status === "offered" ? task.offeredTo : task.agentId;
       if (!holderId) continue;
       const agent = agents.find((a) => a.id === holderId);
-      if (!agent || agent.status === "offline") {
+      if (!agent || !(await isAgentReachable(agent))) {
         orphanedTasks.push(task);
       }
     }
@@ -1664,6 +1626,91 @@ export async function getBootTriageFindings(): Promise<BootTriageFindings> {
   };
 }
 
+type ChecklistGateVerdict =
+  | { verdict: "quiet"; reason: string }
+  | { verdict: "wake"; reason: string; summary: string | null }
+  | { verdict: "error"; reason: string };
+
+/**
+ * Look up the global gate script and run it as the Lead. `deps` lets tests
+ * stall credential setup on the real path.
+ */
+export async function defaultChecklistGateRunner(
+  scriptName: string,
+  leadAgentId: string,
+  signal: AbortSignal,
+  deps: Parameters<typeof runSavedScriptAsAgent>[1] = {},
+): Promise<unknown> {
+  const script = await getScript({ name: scriptName, scope: "global" });
+  if (!script) throw new Error(`global script "${scriptName}" not found`);
+  const output = await runSavedScriptAsAgent(
+    {
+      script,
+      input: { leadAgentId },
+      agentId: leadAgentId,
+      timeoutMs: checklistGateTimeoutMs,
+      signal,
+    },
+    deps,
+  );
+  if (output.exitCode !== 0 || output.error || output.runtimeError) {
+    throw new Error(
+      output.runtimeError?.message ?? output.error ?? `script exited with code ${output.exitCode}`,
+    );
+  }
+  return output.result;
+}
+
+/**
+ * Ask the gate script whether this tick needs the Lead. The script returns
+ * `{ quiet: boolean, reason?: string, summary?: string }`. Anything else, and
+ * any failure, is an `error` verdict, which never skips a checklist.
+ *
+ * One deadline covers the whole call, credential setup included. When it
+ * fires, the runner's signal aborts (the script never starts, or is killed)
+ * and the verdict is `error` without waiting for the runner to settle.
+ */
+async function runChecklistGate(
+  scriptName: string,
+  leadAgentId: string,
+): Promise<ChecklistGateVerdict> {
+  const controller = new AbortController();
+  const timeoutMs = checklistGateTimeoutMs;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const runner = checklistGateRunnerForTests ?? defaultChecklistGateRunner;
+    const run = runner(scriptName, leadAgentId, controller.signal);
+    // A runner that settles after the deadline must not surface as an unhandled rejection.
+    run.catch(() => {});
+    const deadline = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        controller.abort();
+        reject(new Error(`gate timed out after ${timeoutMs}ms`));
+      }, timeoutMs);
+    });
+    const result = (await Promise.race([run, deadline])) as {
+      quiet?: unknown;
+      reason?: unknown;
+      summary?: unknown;
+    } | null;
+    if (!result || typeof result !== "object" || typeof result.quiet !== "boolean") {
+      return { verdict: "error", reason: "result has no boolean `quiet` field" };
+    }
+    const reason = typeof result.reason === "string" ? result.reason.slice(0, 300) : "";
+    if (result.quiet) return { verdict: "quiet", reason };
+    const summary =
+      typeof result.summary === "string" && result.summary.trim()
+        ? result.summary.slice(0, 4000)
+        : null;
+    return { verdict: "wake", reason, summary };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { verdict: "error", reason: scrubSecrets(message).slice(0, 300) };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /**
  * Check HEARTBEAT.md content and create a checklist task for the lead if needed.
  */
@@ -1687,7 +1734,28 @@ export async function checkHeartbeatChecklist(): Promise<void> {
   );
   if (existing) return;
 
-  const systemStatus = await gatherSystemStatus();
+  const gateScript = heartbeatChecklistGateScript();
+  const gateMode = heartbeatChecklistGateMode();
+  const gate = gateScript ? await runChecklistGate(gateScript, lead.id) : null;
+  if (gate) {
+    console.log(
+      `[Heartbeat] Checklist gate "${gateScript}" (${gateMode}): ${gate.verdict}${gate.reason ? ` (${gate.reason})` : ""}`,
+    );
+  }
+  if (gate?.verdict === "quiet" && gateMode === "enforce") {
+    console.log(`[Heartbeat] Checklist skipped for lead ${lead.name}: quiet tick`);
+    return;
+  }
+
+  let systemStatus = await gatherSystemStatus();
+  // Shadow mode leaves the prompt untouched so the Lead's own quiet/non-quiet
+  // outcome stays an independent check on the gate's verdict.
+  if (gateMode === "enforce" && gate?.verdict === "wake" && gate.summary) {
+    const findings = resolveTemplate("heartbeat.checklist.gate_findings", {
+      gate_summary: gate.summary,
+    });
+    if (!findings.skipped && findings.text) systemStatus += `\n\n${findings.text}`;
+  }
 
   const result = resolveTemplate("heartbeat.checklist", {
     system_status: systemStatus,
@@ -1704,7 +1772,7 @@ export async function checkHeartbeatChecklist(): Promise<void> {
     // the swarm's own work, not as a human's MCP usage.
     source: "system",
     taskType: "heartbeat-checklist",
-    tags: ["checklist", "auto-generated"],
+    tags: ["checklist", "auto-generated", ...(gate ? [`heartbeat-gate:${gate.verdict}`] : [])],
     priority: 60,
   });
 
@@ -1762,7 +1830,7 @@ export async function runHeartbeatSweep(): Promise<void> {
       // offered and its offeree deleted/closed in the same idle window isn't
       // left waiting for the next actionable tick.
       cleanupOnlyFindings.staleCleanup.staleOfferedTasks =
-        await releaseStaleOfferedTasksForOfflineAgents();
+        await releaseStaleOfferedTasksForOfflineAgents(isAgentReachable);
       await cleanupStaleResources(cleanupOnlyFindings);
       logFindings(cleanupOnlyFindings);
       return; // Nothing actionable — bail early

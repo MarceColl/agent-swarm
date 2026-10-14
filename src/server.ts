@@ -107,6 +107,12 @@ import {
   registerRoomGetTool,
   registerRoomResetTool,
 } from "./tools/rooms";
+import { registerRuntimeControllerListTool } from "./tools/runtime-controller-list";
+import { registerRuntimePoolBindAgentTool } from "./tools/runtime-pool-bind-agent";
+import { registerRuntimePoolCreateAgentTool } from "./tools/runtime-pool-create-agent";
+import { registerRuntimePoolDeleteTool } from "./tools/runtime-pool-delete";
+import { registerRuntimePoolListTool } from "./tools/runtime-pool-list";
+import { registerRuntimePoolUpsertTool } from "./tools/runtime-pool-upsert";
 // Scheduling capability
 import {
   registerCreateScheduleTool,
@@ -323,6 +329,7 @@ function resolveToolAllowlist(value: string | undefined): string[] | undefined {
 
 /** Drop every registered tool the allowlist does not name; warn on unknown names. */
 function applyToolAllowlist(server: McpServer, allowlist: readonly string[]): void {
+  // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- the MCP SDK keeps its tool registry private.
   const tools = (server as unknown as { _registeredTools: Record<string, { remove(): void }> })
     ._registeredTools;
   const allowed = new Set(allowlist);
@@ -495,6 +502,12 @@ export async function createServer(
     registerExtensionCatalogTool(server);
     registerExtensionInstallTool(server);
     registerExtensionListTool(server);
+    registerRuntimePoolListTool(server);
+    registerRuntimePoolUpsertTool(server);
+    registerRuntimePoolDeleteTool(server);
+    registerRuntimePoolBindAgentTool(server);
+    registerRuntimePoolCreateAgentTool(server);
+    registerRuntimeControllerListTool(server);
     registerScriptDeleteTool(server);
     registerScriptQueryTypesTool(server);
     registerScriptRunsTools(server);

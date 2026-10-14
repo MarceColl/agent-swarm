@@ -1,5 +1,5 @@
 {
-  "title": "API Reference v1.167.0",
+  "title": "API Reference v1.172.0",
   "description": "REST API reference for agent-swarm.dev",
   "root": true,
   "pages": [
@@ -39,6 +39,7 @@
     "prompttemplates",
     "repos",
     "rooms",
+    "runtime-pools",
     "schedules",
     "script-connections",
     "script-runs",
@@ -46,9 +47,11 @@
     "session-data",
     "sessions",
     "skills",
+    "slack",
     "stats",
     "status",
     "tasks",
+    "telemetry",
     "trackers",
     "users",
     "webhooks",

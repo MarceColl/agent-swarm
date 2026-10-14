@@ -43,6 +43,7 @@ type Expected = Record<PrincipalName, boolean>;
 const LEAD_ONLY_VERBS: PermissionVerb[] = [
   "user.manage",
   "agent.profile.update.any",
+  "agent.act.any",
   "agent.context.read.any",
   "memory.learning.inject",
   "memory.write.consolidated",
@@ -91,8 +92,14 @@ const LEAD_OR_OPERATOR_OR_USER_VERBS: PermissionVerb[] = [
   "extension.activate",
   "extension.install.inline",
   "repo.merge-policy.write",
+  "runtime_pool.bind",
 ];
-const OPERATOR_OR_USER_VERBS: PermissionVerb[] = ["comb.presence", "approval.respond"];
+const OPERATOR_OR_USER_VERBS: PermissionVerb[] = [
+  "comb.presence",
+  "approval.respond",
+  "runtime_controller.write",
+  "runtime_pool.write",
+];
 
 const LEAD_OR_OPERATOR_VERBS: PermissionVerb[] = ["models.catalog.write"];
 

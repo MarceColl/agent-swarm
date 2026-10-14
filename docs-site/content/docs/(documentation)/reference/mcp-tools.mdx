@@ -1151,7 +1151,7 @@ the generated `.d.ts` and rejects on diagnostics.
 | `description` | string | No | Human-readable script description |
 | `intent` | string | No | Why this script exists |
 
-A script may also export a Zod schema named `argsSchema` describing its expected arguments. On upsert the runtime extracts it, converts it to JSON Schema via `zod`'s `toJSONSchema`, and stores it on the catalog entry as `argsJsonSchema` — so callers can discover a script's argument shape before running it. The export is optional; scripts without it simply have a `null` `argsJsonSchema`.
+A script may also export a Zod schema named `argsSchema` describing its expected arguments. On upsert the runtime extracts it, converts it to JSON Schema via `zod`'s `toJSONSchema`, and stores it on the catalog entry as `argsJsonSchema` — so callers can discover a script's argument shape before running it. The export is optional; scripts without it simply have a `null` `argsJsonSchema`. The schema can be written with either `zod` or `zod/mini` (`import * as z from "zod/mini"`); Mini uses functional forms such as `z.optional(z.string())`.
 
 There is no ambient task context: pass values such as `taskId` through `args`.
 Inline and named scripts receive `ctx.swarm`, registered `ctx.api` / `ctx.mcp`
@@ -1261,6 +1261,21 @@ Extensions execute inside the API process without host isolation.
 
 Get the installed `id` from `extension-list`. The script SDK exposes these tools with
 underscores, for example `ctx.swarm.extension_enable({ id })`.
+
+## Runtime pool tools
+
+The `scripts` capability also registers the runtime pool tools (beta, needs
+`RUNTIME_POOLS_ENABLED=true` on the API). They proxy the runtime pools HTTP API and need
+HTTP MCP transport with agent identity. See [Runtime pools](/docs/guides/runtime-pools).
+
+| Tool | Parameters | Effect |
+|------|------------|--------|
+| `runtime-pool-list` | — | List runtime pools and their configuration |
+| `runtime-pool-upsert` | pool fields; `id` to update | Create a pool (requires name, kind, and one controller placement) or update one by id. Operator or user callers only: agents, including the lead, get a permission error |
+| `runtime-pool-delete` | `poolId`, `force` | Delete a pool. `force` unbinds its agents first |
+| `runtime-pool-bind-agent` | `agentId`, `poolId` | Bind an agent to a pool. A null `poolId` removes the binding |
+| `runtime-pool-create-agent` | agent fields, `poolId` | Create an offline agent bound to a pool. An existing lead prevents creating another lead |
+| `runtime-controller-list` | — | List runtime controllers. Responses name secret keys and omit secret values |
 
 ## Debug Tools
 

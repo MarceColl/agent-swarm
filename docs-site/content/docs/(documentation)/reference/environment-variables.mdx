@@ -40,6 +40,7 @@ Complete reference for all environment variables used by Agent Swarm.
 | `ASSET_KEY_AUDIT_DISABLE_STARTUP_HARD_FAIL` | `false` | Temporary recovery switch. When `true`, the startup asset-namespace audit logs structural key failures instead of aborting the server. Repair the data and remove the switch before normal operation; mapping-drift warnings never abort startup. See [Asset Namespaces](/docs/guides/asset-namespaces#audit-and-rollout). |
 | `SQLITE_VEC_EXTENSION_PATH` | — | Path to `vec0.so` native extension for sqlite-vec vector search. Set automatically in the Docker image (`/app/extensions/vec0.so`). Only needed for non-Docker deployments. |
 | `SCRIPT_EXECUTOR` | `native` | How the API server runs scripts. `native` spawns a sandboxed `bun` subprocess per run. `quickjs` (experimental) runs scripts in QuickJS (WASM) inside a pool of worker threads, with ~1 ms per-run overhead (against ~10 ms for `native` on Linux) and a smaller API surface. See [Scripts runtime § Executors](/docs/guides/scripts-runtime#executors). |
+| `SCRIPT_QUICKJS_POOL_SIZE` | `4` | Maximum QuickJS worker threads, an integer from 1 to 32. Read when the shared pool is first created; restart the API after changes. More workers trade memory for concurrent throughput. Separate from `SCRIPT_RUN_CONCURRENCY_CAP`. |
 | `SCRIPT_RUNTIME_DIR` | — | Directory holding the pre-built script-runtime bundles (`eval-harness.bundle.js`, `stdlib.bundle.js`, `swarm-sdk.bundle.js`, `zod.bundle.js`) and the `zod-esm/` sources that the `quickjs` executor bundles from. Set automatically in the Docker image (`/app/scripts-runtime`). Required by the scripts runtime when running as a compiled binary, since the harness subprocess cannot read the binary's `/$bunfs/` virtual filesystem. |
 | `TS_LIB_DIR` | — | Directory holding the TypeScript `lib.*.d.ts` files used by script typecheck. Set automatically in the Docker image (`/app/typescript-lib`). Required in compiled-binary mode so the TypeScript compiler can resolve the default lib. |
 | `MIGRATIONS_DIR` | — | Directory for packaged `.sql` migration files in compiled-binary mode. It is selected explicitly when `import.meta.dir` resolves inside Bun's `/$bunfs/` virtual filesystem, even if that directory can be read. Set automatically in the Docker image (`/app/migrations`); a missing or empty directory now stops a fresh database from booting without its baseline schema. Only needed for non-Docker compiled deployments. |
@@ -84,6 +85,8 @@ Complete reference for all environment variables used by Agent Swarm.
 | `HEARTBEAT_INTERVAL_MS` | `90000` | Heartbeat sweep interval (ms) |
 | `HEARTBEAT_CHECKLIST_DISABLE` | `false` | Set to `true` or `1` to disable the periodic `HEARTBEAT.md` checklist polling loop and the boot-triage task (separate from the infrastructure sweep). `false` and `0` keep it on. |
 | `HEARTBEAT_BOOT_TRIAGE_ALWAYS` | `false` | Set to `true` or `1` to create the boot-triage task on every restart. By default a clean boot (no interrupted, stalled, orphaned, or resume-less superseded tasks) only logs a one-line note and creates no Lead task. |
+| `HEARTBEAT_CHECKLIST_GATE_SCRIPT` | - | Name of a global-scope script run (as the Lead) before each recurring checklist task. One 60 s deadline covers lookup, credential setup, and execution. It returns `{ quiet: boolean, reason?: string, summary?: string }`. A failure, a timeout, or any other shape counts as an `error` verdict and never skips a task. Unset turns the gate off. |
+| `HEARTBEAT_CHECKLIST_GATE_MODE` | `shadow` | `shadow` creates every checklist task and tags it `heartbeat-gate:quiet`, `heartbeat-gate:wake`, or `heartbeat-gate:error`, so you can compare the verdict with the Lead's outcome. `enforce` skips the task on a quiet verdict and appends the gate's `summary` to the task on a wake verdict. |
 | `HEARTBEAT_CHECKLIST_INTERVAL_MS` | `1800000` | Interval (ms) between `HEARTBEAT.md` checklist checks (default 30 min). `0` turns the recurring check off; boot triage still runs. |
 | `HEARTBEAT_DISABLE` | `false` | Set to `true` to disable the heartbeat module |
 | `HEARTBEAT_STALL_THRESHOLD_MIN` | `30` | Minutes before an in-progress task is considered stalled |
@@ -96,6 +99,12 @@ Complete reference for all environment variables used by Agent Swarm.
 | `HEARTBEAT_PIN_GRACEFUL_RESUME` | `true` (on) | Rollback kill-switch for pinning `graceful_shutdown` resumes back to their original agent. Set to `0` to restore the old pool-based follow-up path |
 | `HEARTBEAT_RESUME_PIN_GRACE_MIN` | `10` | Grace window (minutes) a same-agent-pinned crash-recovery or graceful-shutdown resume waits before the reaper escalates it to a Lead re-delegation decision. Set to `0` to disable the reaper |
 | `RUNTIME_STALE_THRESHOLD_MIN` | `5` | Minutes without runtime traffic before an active runtime stops counting and the heartbeat sweep retires it. Used only when `MULTI_RUNTIME_ENABLED` is on. |
+| `RUNTIME_POOLS_ENABLED` | `false` | Enables runtime pools (beta): push-based, on-demand workers that the API starts through Docker or E2B controllers. Keep `MULTI_RUNTIME_ENABLED=true` too. See [Runtime pools](/docs/guides/runtime-pools) for the full list of `RUNTIME_*` tuning variables |
+| `RUNTIME_DEFAULT_DELIVERY` | `poll` | Delivery mode (`poll` or `push`) for pool workers whose pool does not set one |
+| `RUNTIME_WAKE_GRACE_SEC` | `15` | Seconds a task waits for an awake agent before routing can assign it to an eligible sleeping pool agent |
+| `RUNTIME_PROVISION_CONCURRENCY` | `8` | Maximum runtimes the supervisor provisions at once |
+| `RUNTIME_WORKER_API_URL` | - | API origin that pool workers use to reach the swarm, when it differs from the public API URL |
+| `RUNTIME_DOCKER_HOST` | - | Docker socket seeded into the built-in controller, even when Docker is offline. Falls back to `DOCKER_HOST`, then `unix:///var/run/docker.sock` |
 | `APPROVAL_REQUEST_AUTO_CANCELLATION_DAYS` | `7` | Days a pending approval request with no explicit timeout waits before the heartbeat cancels it. A request that gates a running or waiting workflow run cancels that run too. Set to `0` to disable |
 | `MODEL_LATEST_SOAK_DAYS` | `2` | Days a newly released model must age before a `latest:<provider>/<target>@stable` model-tier alias can resolve to it. `0` disables the soak. `@any` aliases ignore it |
 | `MODEL_AUTO_UPGRADE` | `true` | Set to `false` or `0` to freeze each `latest:` model-tier alias at its last recorded resolution (an alias never resolved before still resolves once). See [Model tiers](https://github.com/desplega-ai/agent-swarm/blob/main/runbooks/model-tiers.md) |
@@ -195,11 +204,8 @@ See [Provider Auth: Grok](/docs/guides/provider-auth/grok) for models, isolation
 | `OPENROUTER_BASE_URL` | No | `https://openrouter.ai/api/v1` | OpenAI-compatible gateway used by the OpenRouter provider, model refreshes, and the session summarizer plugin. Any chat-completions gateway works — see [Model Gateways](/docs/guides/provider-auth/model-gateways) |
 | `ANTHROPIC_API_KEY` | One of* | — | Anthropic API key for Claude models |
 | `OPENAI_API_KEY` | One of* | — | OpenAI API key for GPT models |
-| `OPENCODE_BINARY` | No | `opencode` | Path to the opencode CLI binary (if not in `$PATH`) |
+| `OPENCODE_SDK_PATH` | No | Global npm root | Absolute path to `@opencode/sdk/dist/index.js`, when it is not under `/usr/lib/node_modules` or `/usr/local/lib/node_modules` |
 | `OPENCODE_SKILLS_DIR` | No | `~/.opencode/skills` | Directory used by the OpenCode inline resolver for `/<skill>` prompts |
-| `OPENCODE_SERVER_TIMEOUT_MS` | No | `30000` | Timeout (ms) for the opencode SDK's server-start call; override when cold-start on slow disks (e.g. E2B) exceeds the SDK's own 5s default and spawn fails with "Timeout waiting for server to start" |
-| `OPENCODE_SWARM_PLUGIN_PATH` | No | Set automatically in the Docker image | Explicit override for the absolute path to the agent-swarm opencode plugin entrypoint; falls back to the Docker path if present, else a dev-relative path from source |
-| `CONTEXT_MODE_OPENCODE_PLUGIN_PATH` | No | Auto-discovered under the global npm root | Override for the absolute path to context-mode's built opencode plugin entry, used when the default global npm-root search can't find it — otherwise context-mode is silently skipped for that session |
 | `MODEL_OVERRIDE` | No | `openrouter/qwen/qwen3-coder-flash` | Model string passed to opencode. Use `provider/model-id` format (e.g. `anthropic/claude-sonnet-4-6`, `openai/gpt-4o`) |
 
 \* At least one of `OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `~/.local/share/opencode/auth.json` is required.
@@ -259,6 +265,7 @@ Run the one-time `bunx @desplega.ai/agent-swarm claude-managed-setup` from your 
 | `STARTUP_SCRIPT_STRICT` | No | `false` | Exit on startup script failure. By default, per-agent `setupScript` failures log a v1.106.0 privilege-boundary migration warning and the worker continues booting |
 | `SHUTDOWN_TIMEOUT` | No | `30000` | Grace period (ms) before pausing tasks |
 | `MAX_CONCURRENT_TASKS` | No | `1` | Maximum parallel tasks per worker |
+| `SWARM_DELIVERY_MODE` | No | Pool setting | `poll` or `push`. Overrides the delivery mode a runtime pool worker gets at registration. Pool supervisors set it on the workers they start. See [Runtime pools](/docs/guides/runtime-pools#push-and-poll-delivery) |
 | `SWARM_URL` | No | `localhost` | Base domain for service URLs |
 | `LEAD_PORT` | No | `3020` | Host port for lead service. Example variable used in `docker-compose.example.yml` — adjust to your setup. In isolated network namespaces all services can share the same port. |
 | `WORKER1_PORT` | No | `3021` | Host port for worker-1 service. Example — see `LEAD_PORT`. |
@@ -471,6 +478,7 @@ Identity envs that brand the swarm and gate cloud-only UX. All are read on every
 | `SWARM_ORG_NAME` | `Swarm` | Sidebar header name. Also sent as `metadata.organization_name` and `context.org_name` on every telemetry event when set |
 | `SWARM_ORG_ID` | none | Stable org/tenant identifier exposed on `/status` as `identity.org_id` and sent as `metadata.organization_id` and `context.org_id` on every telemetry event when set. Set by the orchestrator on cloud deployments. Self-host installs that leave it unset get a random `org_` ID instead |
 | `SWARM_ORG_LOGO_URL` | bundled `/logo.png` | Sidebar logo URL (any HTTPS URL). Falls back to the bundled logo if it fails to load |
+| `SWARM_ORG_WEBSITE` | unset | Company website as a bare hostname (`example.com`). When `SWARM_ORG_LOGO_URL` is empty, saving it in the dashboard fills the logo from the telemetry proxy (`https://proxy.desplega.sh/v1/logo?domain=<host>`). Sent with telemetry as `org_website`. |
 | `SWARM_BRAND_COLOR` | none | Tints the org name in the sidebar header (any CSS color, e.g. `#a855f7`) |
 | `SWARM_MARKETING_URL` | none | Self-host marketing footer link target. Suppressed when `SWARM_CLOUD=true` or `SWARM_HIDE_CLOUD_PROMO=true` |
 | `SWARM_HIDE_CLOUD_PROMO` | `false` | Force-hide the marketing footer regardless of `SWARM_CLOUD` |

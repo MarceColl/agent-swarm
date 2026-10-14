@@ -615,6 +615,15 @@ describe("script connections", () => {
       markMigrationApplied(database, "201_workflow_replay_columns.sql");
       // 202 moves rows out of kv_entries, which this migration-112-only fixture does not create.
       markMigrationApplied(database, "202_codex_oauth_device_flows.sql");
+      // 203 alters workflow_runs, which this migration-112-only fixture does not create.
+      markMigrationApplied(database, "203_workflow_run_parent_step.sql");
+      // 205 copies user_favorites rows, which this migration-112-only fixture does not create.
+      markMigrationApplied(database, "205_favorites_per_dashboard_user.sql");
+      // 206 alters agents, agent_tasks and runtime_instances, which this
+      // migration-112-only fixture does not create.
+      markMigrationApplied(database, "206_runtime_pools.sql");
+      // 207 rebuilds session_tokens, which this migration-112-only fixture does not create.
+      markMigrationApplied(database, "207_runtime_session_tokens.sql");
       // 213 rebuilds script_connections with the post-117 columns this fixture skips.
       markMigrationApplied(database, "213_script_connections_sql.sql");
 

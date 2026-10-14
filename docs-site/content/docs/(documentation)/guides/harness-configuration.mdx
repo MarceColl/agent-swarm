@@ -1,6 +1,6 @@
 ---
 title: Harness Configuration
-description: Configure the AI provider (Claude Code, Codex, opencode, pi-mono, Devin, or Claude Managed Agents) that powers your agents
+description: Configure the AI provider (Claude Code, Codex, opencode, pi-mono, Devin, Claude Managed Agents, dsh, Amp, Cursor, or Grok) that powers your agents
 ---
 
 import { Tab, Tabs } from "fumadocs-ui/components/tabs";
@@ -18,6 +18,10 @@ Agent Swarm uses a **harness** abstraction to decouple task execution from the u
 | **Devin** | `devin` | Cognition's Devin via the `/sessions` API — session executes in Devin's managed cloud, ACU-based cost tracking |
 | **Claude Managed Agents** | `claude-managed` | Anthropic's managed cloud sandbox — sessions execute outside the worker. Requires one-time setup CLI to create the Anthropic-side Agent + Environment |
 | **ACP (Agent Client Protocol)** | `acp` | Any [Agent Client Protocol](https://agentclientprotocol.com) agent, spawned as a subprocess and driven over stdio. No swarm-side model-provider credential — the target owns its own model auth. It receives a session-scoped `aseph_` token as the swarm MCP bearer, granting that agent's swarm MCP access for up to 24 hours; point it only at a binary you trust |
+| **DeepSeek Harness** | `dsh` | DeepSeek's `@deepseek-ai/dsh` CLI. A model's `openrouter/` prefix selects OpenRouter; bare IDs select DeepSeek's API |
+| **Amp** | `amp` | Sourcegraph's Amp CLI in execute mode. Amp selects the model for each mode on its service |
+| **Cursor** | `cursor` | Cursor's local Agent SDK runtime with Cursor-hosted models |
+| **Grok** | `grok` | xAI's Grok CLI, run as an ACP server with a fresh session home |
 
 ## How It Works
 
@@ -35,6 +39,10 @@ HARNESS_PROVIDER=claude-managed  →  ClaudeManagedAdapter  →  opens SSE strea
                                                             (session executes server-side)
 HARNESS_PROVIDER=acp             →  ACPAdapter            →  spawns `ACP_TARGET_COMMAND`,
                                                             speaks ndjson ACP over stdio
+HARNESS_PROVIDER=dsh             →  DshAdapter            →  spawns `dsh` in headless JSON mode
+HARNESS_PROVIDER=amp             →  AmpAdapter            →  spawns `amp` in execute mode
+HARNESS_PROVIDER=cursor          →  CursorAdapter         →  creates a local Cursor SDK agent
+HARNESS_PROVIDER=grok            →  GrokAdapter           →  starts `grok agent` through ACP
 ```
 
 Both adapters implement the same `ProviderAdapter` interface, producing normalized `ProviderEvent` streams (session init, tool calls, cost data, context usage, etc.) that the runner consumes identically.
@@ -222,10 +230,10 @@ At least one credential source is required. The Docker entrypoint validates this
 |----------|----------|---------|-------------|
 | `HARNESS_PROVIDER` | Yes | — | Must be set to `opencode` |
 | `OPENROUTER_API_KEY` | One of* | — | OpenRouter API key (primary — gives access to all OpenRouter models) |
-| `OPENROUTER_BASE_URL` | No | `https://openrouter.ai/api/v1` | Route OpenRouter provider, model-refresh, and session-summary traffic through an OpenAI-compatible gateway |
+| `OPENROUTER_BASE_URL` | No | `https://openrouter.ai/api/v1` | Route OpenRouter provider and session-summary traffic through an OpenAI-compatible gateway |
 | `ANTHROPIC_API_KEY` | One of* | — | Anthropic API key for Claude models |
 | `OPENAI_API_KEY` | One of* | — | OpenAI API key for GPT models |
-| `OPENCODE_BINARY` | No | `opencode` | Path to the opencode CLI binary (if not in `$PATH`) |
+| `OPENCODE_SDK_PATH` | No | Global npm root | Absolute path to `@opencode/sdk/dist/index.js`, when it is not under `/usr/lib/node_modules` or `/usr/local/lib/node_modules` |
 
 \* At least one credential source is required (`OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `~/.local/share/opencode/auth.json`).
 
@@ -241,13 +249,14 @@ The default model is `openrouter/qwen/qwen3-coder-flash`. Set `MODEL_OVERRIDE` t
 
 ### Reasoning / Effort
 
-Set the per-agent reasoning/effort level (`off | low | medium | high | xhigh`) via `PATCH /api/agents/{id}/runtime`. opencode has no single reasoning knob — the swarm translates the level into provider-keyed options in the per-task `opencode.json`: `anthropic/*` models get `thinking.budgetTokens` (an internal numeric translation, not a user-facing knob), `openrouter/*` models get `reasoning.effort`, and OpenAI-compatible models get `reasoningEffort`. `off` omits reasoning keys entirely — opencode has no explicit off switch.
+Set the per-agent reasoning/effort level (`off | low | medium | high | xhigh`) via `PATCH /api/agents/{id}/runtime`. opencode has no single reasoning knob — the swarm translates the level into provider-keyed options in the per-task opencode config: `anthropic/*` models get `thinking.budgetTokens` (an internal numeric translation, not a user-facing knob), `openrouter/*` models get `reasoning.effort`, and OpenAI-compatible models get `reasoningEffort`. `off` omits reasoning keys entirely — opencode has no explicit off switch.
 
 ### opencode Specifics
 
-- **Agent-swarm plugin**: the `plugin/opencode-plugins/agent-swarm.ts` plugin is automatically injected at session creation. It handles heartbeat, task cancellation, identity sync, system-prompt transformation, compaction, and idle hooks — no manual configuration needed.
-- **Per-task isolation**: each session gets its own agent file (`.opencode/agents/swarm-<taskId>.md`), config file (`/tmp/opencode-<taskId>.json`), and data directory (`/tmp/opencode-data-<taskId>`) to prevent cross-task state bleed.
-- **MCP tool discovery**: the swarm MCP endpoint is wired in automatically via the per-task config; installed MCP servers are also discovered and merged in.
+- **In-process OpenCode 2**: each task runs its own embedded `@opencode/sdk` host inside the worker process. There is no `opencode serve` child. Config is passed as a string, the session database is in memory, and nothing is written into the task's working directory.
+- **Agent-swarm plugin**: `src/providers/opencode-swarm-plugin.ts` is passed to the host as a plugin object. It handles task cancellation, the polling limit, the activity heartbeat, lead concurrent context, and the compaction goal reminder. The adapter runs identity sync, memory auto-indexing, the session summary, and session close from the event stream.
+- **MCP tool discovery**: the swarm MCP endpoint is wired in automatically via the per-task config; installed MCP servers are also discovered and merged in. context-mode is added as a stdio MCP server unless `CONTEXT_MODE_DISABLED=true`. Before the first prompt the adapter waits up to 30 seconds for the swarm server to connect and register `store-progress`; a refused, unauthorized, or tool-less server fails the task with the reason instead of running without swarm tools.
+- **Session summaries do not read `auth.json`**: the end-of-session summary uses the shared internal-ai credentials, not OpenCode's `~/.local/share/opencode/auth.json`. A worker that authenticates OpenCode only through that file runs tasks normally but skips summaries (`session_summary skipped (opencode)`). To keep them, give the worker `OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`, Codex OAuth (see [Provider Auth: Codex OAuth](/docs/guides/provider-auth/codex-oauth)), or `CLAUDE_CODE_OAUTH_TOKEN`; the first one found wins, in that order.
 
 ---
 
@@ -371,7 +380,7 @@ For full provider design rationale (why we don't `agents.create` at runtime, the
 
 `acp` drives any agent that speaks the [Agent Client Protocol](https://agentclientprotocol.com) — an open, editor-agnostic JSON-RPC protocol for driving coding agents over stdio. If your agent already has an ACP server mode (or you build one), you can run it as a swarm worker with no adapter code of your own. See the protocol's own [Get started → Agents](https://agentclientprotocol.com/get-started/agents) guide for what it takes for an agent to speak ACP.
 
-The dashboard offers curated **OpenCode**, **Gemini CLI**, and **GitHub Copilot CLI** presets and a free-form **Custom** target. ACP has no live steering (see the steering table in [Adding a Harness Provider](/docs/guides/harness-providers#live-task-steering) — ACP exposes a single in-flight `session/prompt` and the only interrupt is a full `session/cancel`).
+The dashboard offers curated **OpenCode**, **Gemini CLI**, **GitHub Copilot CLI**, **Qwen Code**, **Kiro CLI**, and **Goose** presets and a free-form **Custom** target. ACP has no live steering (see the steering table in [Adding a Harness Provider](/docs/guides/harness-providers#live-task-steering) — ACP exposes a single in-flight `session/prompt` and the only interrupt is a full `session/cancel`).
 
 ### How it works
 
@@ -384,7 +393,7 @@ Because the target process owns its own model credentials, `acp` reports `ready:
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `HARNESS_PROVIDER` | Yes | — | Must be set to `acp` |
-| `ACP_TARGET` | No | `custom` | `opencode` or `gemini` for a curated preset, `copilot` for the GitHub Copilot CLI preset, or `custom` for an operator-supplied command |
+| `ACP_TARGET` | No | `custom` | `opencode`, `gemini`, `copilot`, `qwen`, `kiro` or `goose` for a curated preset, or `custom` for an operator-supplied command |
 | `ACP_TARGET_COMMAND` | Custom only | — | Executable to spawn as the custom ACP agent (also accepts the shorter `ACP_COMMAND` alias). Must resolve on `$PATH` or be an absolute path |
 | `ACP_TARGET_ARGS` | No | — | Arguments to the target command. Accepts a JSON array (`["acp", "--flag"]`) or a plain whitespace-separated string |
 | `ACP_TARGET_ENV_KEYS` | No | `[]` | JSON array (or comma-separated list for hand-authored config) of environment/config keys explicitly allowed into a custom target process |
@@ -398,7 +407,7 @@ Use the dashboard runtime editor when possible. It updates the harness, `MODEL_O
 
 Any ACP-speaking agent works. A few starting points:
 
-<Tabs items={["opencode", "GitHub Copilot CLI", "claude-code-acp", "Gemini CLI", "Custom"]}>
+<Tabs items={["opencode", "GitHub Copilot CLI", "claude-code-acp", "Gemini CLI", "Qwen Code", "Kiro CLI", "Goose", "Custom"]}>
   <Tab value="opencode">
     [opencode](https://opencode.ai) ships a built-in ACP server:
 
@@ -465,6 +474,43 @@ Any ACP-speaking agent works. A few starting points:
 
     The preset forwards only Gemini's own auth and endpoint keys: `GEMINI_API_KEY`, `GOOGLE_API_KEY`, the Vertex AI set (`GOOGLE_GENAI_USE_VERTEXAI`, `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`, `GOOGLE_APPLICATION_CREDENTIALS`), `GOOGLE_GEMINI_BASE_URL`, `GOOGLE_VERTEX_BASE_URL` and `GEMINI_CLI_HOME`. The adapter writes the composed system prompt to a private temp file outside the task `cwd` and points `GEMINI_SYSTEM_MD` at it, so it replaces Gemini CLI's built-in prompt. Gemini CLI does not advertise an ACP `model` option, so `MODEL_OVERRIDE` reaches it as `GEMINI_MODEL` at spawn. The preset also sets `GEMINI_CLI_TRUST_WORKSPACE=true`, because a worker cannot answer the folder-trust prompt.
   </Tab>
+  <Tab value="Qwen Code">
+    [Qwen Code](https://github.com/QwenLM/qwen-code) runs as `qwen --acp`. The full worker image ships it, pinned. Give it an OpenAI-compatible endpoint:
+
+    ```bash
+    HARNESS_PROVIDER=acp
+    ACP_TARGET=qwen
+    OPENAI_API_KEY=sk-...
+    OPENAI_BASE_URL=https://api.openai.com/v1
+    MODEL_OVERRIDE=gpt-4.1-mini
+    ```
+
+    Set `OPENAI_BASE_URL` explicitly: without it Qwen Code calls DashScope. `QWEN_AUTH_TYPE` switches to `anthropic`, `gemini`, `vertex-ai` or `openai-responses` (with that provider's keys); browser-only Qwen OAuth is not supported. `MODEL_OVERRIDE` is passed as `--model`. The swarm system prompt replaces Qwen's built-in one through `QWEN_SYSTEM_MD`, from a temp file outside the repo.
+  </Tab>
+  <Tab value="Kiro CLI">
+    [Kiro CLI](https://kiro.dev/docs/cli/acp/) runs as `kiro-cli acp`. The full worker image ships it, pinned. It authenticates with a `KIRO_API_KEY`, which only paid Kiro plans can create:
+
+    ```bash
+    HARNESS_PROVIDER=acp
+    ACP_TARGET=kiro
+    KIRO_API_KEY=ksk_...
+    ```
+
+    `MODEL_OVERRIDE` is passed as `--model`. Kiro reads its prompt from a Kiro agent config, so the swarm system prompt is not injected. Kiro CLI is proprietary AWS software.
+  </Tab>
+  <Tab value="Goose">
+    [Goose](https://goose-docs.ai/docs/gdk/acp/) runs as `goose acp`. The full worker image ships it, pinned. Pick a provider and give it that provider's key:
+
+    ```bash
+    HARNESS_PROVIDER=acp
+    ACP_TARGET=goose
+    GOOSE_PROVIDER=anthropic
+    ANTHROPIC_API_KEY=sk-ant-...
+    MODEL_OVERRIDE=claude-sonnet-4-5
+    ```
+
+    Goose sends every MCP tool to the model at once. OpenAI-API providers cap a request at 128 tools, and the swarm exposes more, so use a provider without that cap. The preset disables the OS keyring and passes the swarm system prompt through `GOOSE_MOIM_MESSAGE_FILE`, which Goose adds to each turn's context.
+  </Tab>
   <Tab value="Custom">
     Any executable that speaks ACP over stdio (reads ndjson on stdin, writes ndjson on stdout) works without modification:
 
@@ -485,11 +531,62 @@ An ACP agent's *own* tools (file edit, shell, etc.) are whatever the target proc
 ### ACP Specifics
 
 - **The target receives a session-scoped `aseph_` token.** `newSession`'s swarm MCP server entry carries this token as an `Authorization` header (see [How it works](#how-it-works) above). The adapter mints it for the session's agent and task, with a 24-hour expiry, and fails closed if minting fails; it never falls back to the operator key. Session completion starts best-effort revocation. If revocation fails, the token remains valid until expiry. `ACP_TARGET_COMMAND` is operator-configured and runs in the worker container as the worker; point it only at a binary you trust with that agent's swarm MCP access for up to 24 hours.
-- **No swarm-side credential gate.** The `acp` adapter has no `readyCheck` — the worker reports `ready: true` immediately. The Docker entrypoint does check the target binary at boot: it resolves the command the adapter would spawn (`opencode`, `gemini` or `copilot` for a preset, otherwise `ACP_TARGET_COMMAND` / `ACP_COMMAND`) and exits with `FATAL` if no target is configured or the executable is not on `$PATH`. Outside the Docker image, an unresolvable target still surfaces at session-spawn time (task fails with `ACP target failed during startup: ...`).
+- **No swarm-side credential gate.** The `acp` adapter has no `readyCheck` — the worker reports `ready: true` immediately. The Docker entrypoint does check the target binary at boot: it resolves the command the adapter would spawn (`opencode`, `gemini`, `copilot`, `qwen`, `kiro-cli` or `goose` for a preset, otherwise `ACP_TARGET_COMMAND` / `ACP_COMMAND`) and exits with `FATAL` if no target is configured or the executable is not on `$PATH`. Outside the Docker image, an unresolvable target still surfaces at session-spawn time (task fails with `ACP target failed during startup: ...`).
 - **No live steering.** `deliverSteering` is not implemented; mid-run messages promote to follow-up tasks the same way an unsupported provider always handles them.
 - **No skill filesystem sync.** The generic worker image still seeds `~/.claude/skills`, `~/.opencode/skills`, etc. at boot, so a target that reads one of those directories natively (like opencode) still sees skills; a fully custom target sees whatever `ACP_SYSTEM_PROMPT_PATH` writes and nothing more.
 
 For full adapter internals (the `SwarmAcpClient`/`ACPSession` classes, MCP server translation, event mapping), see [`src/providers/acp-adapter.ts`](https://github.com/desplega-ai/agent-swarm/blob/main/src/providers/acp-adapter.ts) and [Adding a Harness Provider](/docs/guides/harness-providers).
+
+---
+
+## DeepSeek Harness (dsh)
+
+Set `HARNESS_PROVIDER=dsh` and provide `DEEPSEEK_API_KEY` for bare DeepSeek
+model IDs, or `OPENROUTER_API_KEY` for `openrouter/<id>` models. The tier
+defaults are OpenRouter Flash, OpenRouter Flash, OpenRouter DeepSeek Pro, and
+OpenRouter Claude Opus for `smol` through `ultra`. Reasoning effort is passed
+to dsh when supported. The adapter inserts swarm MCP, has no live steering or
+native resume, and accepts `DSH_BINARY` for a trusted executable override. See
+[Provider Auth: DeepSeek Harness](/docs/guides/provider-auth/dsh) for the route
+selector and a direct-DeepSeek tier map.
+
+## Amp
+
+Set `HARNESS_PROVIDER=amp` and `AMP_API_KEY`. Its tiers map to Amp modes:
+`low`, `medium`, `high`, and `ultra`. A concrete `provider/model` pin overrides
+the mode; reasoning effort applies only to that pin. Amp inserts swarm MCP,
+supports queued steering only, and stores every thread on ampcode.com. See
+[Provider Auth: Amp](/docs/guides/provider-auth/amp) for token setup, mode
+behavior, and cost tracking.
+
+## Cursor
+
+Set `HARNESS_PROVIDER=cursor` and `CURSOR_API_KEY`. The defaults are
+`gpt-5.4-mini`, `claude-sonnet-5-5`, `claude-opus-5-5`, and
+`claude-fable-5-1` for `smol` through `ultra`; the SDK resolves them against
+the account's model list. Cursor passes supported reasoning effort through the
+model's own parameter, wires swarm MCP, and supports steer and queue. Sessions
+are not resumable. See [Provider Auth: Cursor](/docs/guides/provider-auth/cursor)
+for plans and key creation.
+
+## Grok
+
+Set `HARNESS_PROVIDER=grok` and `XAI_API_KEY`, or `OPENROUTER_API_KEY` for an
+`openrouter/<id>` model. Tier defaults are `grok-build-0.1`, `grok-4.3`,
+`grok-4.6`, and `grok-4.7`. Reasoning effort becomes the Grok CLI's effort
+setting when the model supports it. Each session has a fresh `GROK_HOME`,
+includes swarm MCP, and has no live steering or native resume. See
+[Provider Auth: Grok](/docs/guides/provider-auth/grok) for route and billing
+details.
+
+## Devin
+
+Set `HARNESS_PROVIDER=devin`, `DEVIN_API_KEY`, and `DEVIN_ORG_ID`. Every tier
+resolves to `devin`; the adapter does not select a model or apply reasoning
+effort. Sessions run in Devin's cloud, track cost in ACUs, and support queued
+steering. `HAS_MCP=true` is not supported. A suspended session can resume, but
+an exited or errored one cannot. `DEVIN_MAX_ACU_LIMIT` optionally caps a task's
+ACU usage.
 
 ---
 
@@ -504,6 +601,13 @@ For full adapter internals (the `SwarmAcpClient`/`ACPSession` classes, MCP serve
 | **MCP integration** | Native (`.mcp.json` config) | Native (`~/.codex/config.toml`) | Auto-wired per-task via config file | HTTP-based tool discovery | Server-side on the Anthropic Agent | Passed via ACP `newSession.mcpServers`; target must honor it |
 | **Where session runs** | Worker container | Worker container | Worker container | Worker container | Anthropic's managed cloud sandbox | Worker container (subprocess) |
 | **Maturity** | Production-grade, well-tested | Production-grade, well-tested | Early support (2026-05) | Community project, actively developed | Public beta (2026-04) | Experimental — one generic target, no named profiles |
+
+**DeepSeek Harness** suits direct DeepSeek or OpenRouter workloads when its
+model-prefix routing is configured deliberately. **Amp** is a managed-mode
+choice with queue-only steering. **Cursor** suits a Cursor account that needs
+native model effort controls and live steering. **Grok** suits xAI API models
+or OpenRouter models on the Grok CLI. **Devin** runs work remotely in
+Cognition's cloud and bills in ACUs rather than worker-side tokens.
 
 **Recommendation**: Use Claude Code with OAuth for most setups. Use Codex when you specifically want the OpenAI/Codex toolchain or ChatGPT OAuth-backed workers. Use opencode when you want a lightweight open-source runner with access to the full OpenRouter model catalog at low cost. Consider pi-mono when you need a library-based open-source runner. Choose `claude-managed` when you want managed sandboxing (faster cold-start, vault-based credential isolation) and don't need a local runtime. Choose `acp` when you already have (or are building) an ACP-speaking agent and want to run it as a swarm worker without writing a new adapter.
 

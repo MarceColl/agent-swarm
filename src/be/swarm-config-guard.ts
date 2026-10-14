@@ -1,7 +1,9 @@
+import { validateQuickJSPoolSize } from "../scripts-runtime/executors/quickjs-pool-config";
 import { normalizeSlackReactionShortcode } from "../slack/reaction-shortcode";
 import { ProviderNameSchema } from "../types";
 import { API_DRAIN_MAX_MS_LIMIT } from "../utils/api-drain";
 import { parseEnabledTools } from "../utils/enabled-tools";
+import { normalizeOrgWebsite } from "../utils/org-website";
 import { parseTaskToolManifest } from "../utils/task-tool-manifest";
 import { isTierConfigKey, validateTierConfigValue } from "./model-tier-keys";
 
@@ -30,14 +32,16 @@ const RESERVED_KEYS = new Set([
 ]);
 
 /** Config rows owned by dedicated API surfaces, not the generic config API. */
-export const INTERNAL_CONFIG_KEYS = new Set(["onboarding_state"]);
+export const INTERNAL_CONFIG_KEYS = new Set(["onboarding_state", "runtime_owner_id"]);
 
 export function isInternalConfigKey(key: string): boolean {
   return INTERNAL_CONFIG_KEYS.has(key.toLowerCase());
 }
 
 export function internalConfigKeyError(key: string): Error {
-  return new Error(`Key '${key}' is managed by /api/onboarding`);
+  const owner =
+    key.toLowerCase() === "runtime_owner_id" ? "the runtime supervisor" : "/api/onboarding";
+  return new Error(`Key '${key}' is managed by ${owner}`);
 }
 
 export function isReservedConfigKey(key: string): boolean {
@@ -203,7 +207,53 @@ function validateFloatRange(
   return null;
 }
 
+export function validateRuntimeTokenTtlHours(value: unknown): string | null {
+  const hours = Number(value);
+  return typeof value === "string" && Number.isFinite(hours) && hours > 0 && hours <= 168
+    ? null
+    : "Invalid RUNTIME_TOKEN_TTL_HOURS (must be greater than zero and at most 168)";
+}
+
+export const validateControllerTokenTtlDays = boundedIntegerValidators(
+  ["RUNTIME_CONTROLLER_TOKEN_TTL_DAYS"],
+  1,
+  3650,
+).RUNTIME_CONTROLLER_TOKEN_TTL_DAYS!;
+
+export const validateControllerGraceSec = boundedIntegerValidators(
+  ["RUNTIME_CONTROLLER_GRACE_SEC"],
+  0,
+  86_400,
+).RUNTIME_CONTROLLER_GRACE_SEC!;
+
 const VALIDATED_KEYS: Record<string, ConfigValidator> = {
+  ...booleanValidators(["RUNTIME_POOLS_ENABLED"]),
+  ...enumValidator("RUNTIME_DEFAULT_DELIVERY", ["poll", "push"]),
+  RUNTIME_TOKEN_TTL_HOURS: validateRuntimeTokenTtlHours,
+  RUNTIME_CONTROLLER_TOKEN_TTL_DAYS: validateControllerTokenTtlDays,
+  RUNTIME_CONTROLLER_GRACE_SEC: validateControllerGraceSec,
+  ...integerValidators(
+    [
+      "RUNTIME_SUPERVISOR_INTERVAL_MS",
+      "RUNTIME_PROVISION_TIMEOUT_SEC",
+      "RUNTIME_PROVISION_CONCURRENCY",
+      "RUNTIME_PER_TASK_EXIT_GRACE_SEC",
+      "RUNTIME_PROVISION_MAX_ATTEMPTS",
+      "RUNTIME_CIRCUIT_THRESHOLD",
+      "RUNTIME_CIRCUIT_OPEN_MIN",
+      "RUNTIME_TOKEN_ROTATE_BEFORE_MIN",
+      "RUNTIME_LEASE_RENEW_BEFORE_SEC",
+      "RUNTIME_E2B_BUILD_TIMEOUT_SEC",
+      "RUNTIME_ROTATE_BEFORE_SEC",
+      "E2B_MAX_CONTINUOUS_SEC",
+    ],
+    1,
+  ),
+  ...integerValidators(["RUNTIME_SOCKET_GRACE_SEC"], 0),
+  ...integerValidators(
+    ["RUNTIME_WAKE_GRACE_SEC", "RUNTIME_WAKE_REROUTE_SEC", "RUNTIME_ROUTING_INTERVAL_MS"],
+    0,
+  ),
   TASK_TOOL_MANIFESTS: (value) => {
     try {
       if (typeof value !== "string") throw new Error("Expected JSON string");
@@ -264,9 +314,11 @@ const VALIDATED_KEYS: Record<string, ConfigValidator> = {
   },
   ...enumValidator("CLAUDE_TRANSPORT", ["cli", "sdk"]),
   ...enumValidator("SCRIPT_EXECUTOR", ["native", "quickjs"]),
+  SCRIPT_QUICKJS_POOL_SIZE: validateQuickJSPoolSize,
   // fail: worker fails a task fast when every key has exhausted the task
   // model's weekly window (Fable/Opus/Sonnet). fallback: legacy random pick.
   ...enumValidator("MODEL_WINDOW_EXHAUSTED_POLICY", ["fail", "fallback"]),
+  ...enumValidator("HEARTBEAT_CHECKLIST_GATE_MODE", ["shadow", "enforce"]),
   // Codex credits-exhausted cooldown (ms). Permissive on range here (positive
   // integer) — the worker clamps to [5m, 7d] via resolveCodexCreditsExhaustedCooldownMs.
   CODEX_CREDITS_EXHAUSTED_COOLDOWN_MS: (value) => {
@@ -303,7 +355,15 @@ const VALIDATED_KEYS: Record<string, ConfigValidator> = {
     }
     return null;
   },
+  // A bare public hostname, as `normalizeOrgWebsite` stores it, or empty to clear it.
+  SWARM_ORG_WEBSITE: (value) => {
+    const str = String(value).trim();
+    return str === "" || normalizeOrgWebsite(str) === str
+      ? null
+      : "Invalid SWARM_ORG_WEBSITE (must be a public hostname such as example.com, without scheme, www, path or port)";
+  },
   ...booleanValidators([
+    "SWARM_USED_BY_CONSENT",
     "SWARM_DEV_MODE",
     "MULTI_RUNTIME_ENABLED",
     "STEERING_ENABLED",

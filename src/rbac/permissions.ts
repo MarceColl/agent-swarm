@@ -25,6 +25,10 @@ export const PERMISSIONS = {
     description: "Update another agent's profile.",
     namespace: "agent",
   },
+  "agent.act.any": {
+    description: "Act on another agent's scope over HTTP.",
+    namespace: "agent",
+  },
   "agent.context.read.any": {
     description: "View or diff another agent's context history.",
     namespace: "agent",
@@ -310,6 +314,18 @@ export const PERMISSIONS = {
   "script.api.delete": {
     description: "Delete an external script API endpoint.",
     namespace: "script",
+  },
+  "runtime_pool.write": {
+    description: "Create, update, or delete runtime pools (image, provider kind, placement).",
+    namespace: "runtime_pool",
+  },
+  "runtime_pool.bind": {
+    description: "Bind an agent to an existing runtime pool, or create an agent in one.",
+    namespace: "runtime_pool",
+  },
+  "runtime_controller.write": {
+    description: "Create, update, or delete runtime controllers.",
+    namespace: "runtime_controller",
   },
   "extension.write": {
     description: "Install, update, or uninstall a swarm extension.",

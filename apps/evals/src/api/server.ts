@@ -1,8 +1,9 @@
 import { join, normalize, sep } from "node:path";
 import { attachmentContentDisposition } from "../../../../src/utils/content-disposition.ts";
 import { DEFAULT_CONFIG_IDS } from "../../configs/index.ts";
-import { CONFIG_PRESETS, presetRunDefaults } from "../../configs/presets.ts";
-import { SUITE_SCENARIO_VERSIONS } from "../../scenarios/suite.ts";
+import { CONFIG_PRESETS, presetRunDefaults, presetScenarioIds } from "../../configs/presets.ts";
+import { SUITE_VERSION } from "../../scenarios/suite.ts";
+import { buildPublishBundle, COMMIT_RE } from "../benchmark-publish.ts";
 import {
   getCatalog,
   getResolutionCatalog,
@@ -30,11 +31,13 @@ import { getAttemptProgress } from "../live/attempt-progress.ts";
 import { loadRegistry, serializeScenario } from "../registry.ts";
 import { summarizeRun } from "../results.ts";
 import {
+  claimAutoResumableRuns,
   executeRun,
   forceCancelInactiveRun,
   killAllActiveStacks,
   killRunStacks,
   reconcileOrphanedRuns,
+  SHUTDOWN_ABORT_REASON,
 } from "../runner/index.ts";
 import { assertRunConfigsResolve, ensureRunConfigPins } from "../runner/run-configs.ts";
 import { parseEffortOverrides, planRunEfforts } from "../runner/run-efforts.ts";
@@ -74,6 +77,13 @@ import {
   patchConfig,
   serializeConfigResolved,
 } from "./configs-routes.ts";
+import {
+  buildRunSummaryText,
+  isScheduledPreset,
+  onRunFinished,
+  type RunCompletionDeps,
+  slackWebhookPoster,
+} from "./run-completion.ts";
 import {
   mapSuitesResponse,
   parseSuiteQuery,
@@ -454,8 +464,22 @@ function startRunExecution(db: ReturnType<typeof getDb>, runId: string): boolean
     log: (msg) => console.log(`[${runId}] ${msg}`),
   })
     .catch((err) => console.error(`[${runId}] execution crashed:`, err))
-    .finally(() => activeRuns.delete(runId));
+    .finally(() => activeRuns.delete(runId))
+    // Scheduled runs: regression check, reruns, one Slack summary. Never throws into the runner.
+    .then(() => onRunFinished(runCompletionDeps(db), runId))
+    .catch((err) => console.error(`[${runId}] run-completion hook failed:`, err));
   return true;
+}
+
+function runCompletionDeps(db: ReturnType<typeof getDb>): RunCompletionDeps {
+  return {
+    db,
+    registry: loadRegistry(),
+    startRun: (id) => startRunExecution(db, id),
+    postSlack: slackWebhookPoster(process.env.EVALS_SLACK_WEBHOOK_URL),
+    publicUrl: process.env.EVALS_PUBLIC_URL,
+    log: (msg) => console.log(msg),
+  };
 }
 
 async function sha256(value: string): Promise<Uint8Array> {
@@ -493,6 +517,7 @@ export async function startServer(
   opts: {
     reconcileOrphanedRuns?: typeof reconcileOrphanedRuns;
     forceCancelInactiveRun?: typeof forceCancelInactiveRun;
+    claimAutoResumableRuns?: typeof claimAutoResumableRuns;
   } = {},
 ) {
   await initDb();
@@ -500,9 +525,16 @@ export async function startServer(
   await initHarnessConfigs(db);
   const reconcile = opts.reconcileOrphanedRuns ?? reconcileOrphanedRuns;
   const forceCancel = opts.forceCancelInactiveRun ?? forceCancelInactiveRun;
-  const reconciled = await reconcile(db, (msg) => console.log(`[orphan-reconcile] ${msg}`));
+  const orphanedRuns = (await listRuns(db)).filter((run) => run.status === "running");
+  const reconcileLog = (msg: string) => console.log(`[orphan-reconcile] ${msg}`);
+  const reconciled = await reconcile(db, reconcileLog);
   if (reconciled > 0) {
     console.log(`[orphan-reconcile] reconciled ${reconciled} orphaned run(s)`);
+  }
+  // A redeploy must not kill the weekly matrix: resume scheduled runs a restart cut.
+  const claim = opts.claimAutoResumableRuns ?? claimAutoResumableRuns;
+  for (const runId of await claim(db, orphanedRuns, getMaxConcurrentRuns(), reconcileLog)) {
+    startRunExecution(db, runId);
   }
   warnIfApiOpen();
   // Live models.dev catalog (6h revalidation). Off under `bun test` so suites stay offline.
@@ -599,7 +631,7 @@ export async function startServer(
           const scenarioIds = body?.scenarioIds?.length
             ? body.scenarioIds
             : body?.preset !== undefined
-              ? Object.keys(SUITE_SCENARIO_VERSIONS)
+              ? presetScenarioIds(body.preset)
               : [];
           const configIds = body?.configIds?.length ? body.configIds : presetConfigIds;
           if (!body || !scenarioIds.length || !configIds.length) {
@@ -648,6 +680,7 @@ export async function startServer(
             judgeModel: body.judgeModel || undefined,
             efforts,
             maxMeteredUsd,
+            preset: body.preset,
           });
           await ensureRunConfigPins(db, runId, registry, scenarioIds, configIds);
           startRunExecution(db, runId);
@@ -678,6 +711,64 @@ export async function startServer(
           startRunExecution(db, run.id);
           return json({ runId: run.id, resumed: true }, 202);
         },
+      },
+      /**
+       * Regression report and Slack text of a scheduled run (Phase 9), computed from the
+       * database now. `final` is true once no rerun is pending; `summaryPostedAt` is
+       * set once the summary went to Slack. The scheduled-run workflow polls this.
+       */
+      "/api/runs/:id/regression": async (req) => {
+        if (!(await isAuthorized(req))) return unauthorized();
+        const run = await getRun(db, req.params.id);
+        if (!run) return json({ error: "run not found" }, 404);
+        if (!isScheduledPreset(run.preset)) {
+          return json({ error: "run was not started from a scheduled preset" }, 400);
+        }
+        const deps = runCompletionDeps(db);
+        const base = {
+          runId: run.id,
+          preset: run.preset,
+          status: run.status,
+          summaryPostedAt: run.summaryPostedAt ?? null,
+        };
+        if (!TERMINAL_RUN_STATUSES.has(run.status)) {
+          return json({ ...base, final: false, report: null, text: null });
+        }
+        const summary = await buildRunSummaryText(deps, run);
+        return json({ ...base, final: summary.final, report: summary.report, text: summary.text });
+      },
+      /**
+       * What `bun src/cli.ts publish --suite <v> --run <id>` would write, or why it
+       * refuses, as JSON (`files` maps paths under `benchmark/<suite>/` to contents).
+       * Read-only: writes nothing, so the weekly-matrix workflow can open the snapshot
+       * PR. `harnessCommit` (40-hex) names the commit the snapshot records.
+       */
+      "/api/runs/:id/publish-bundle": async (req) => {
+        if (!(await isAuthorized(req))) return unauthorized();
+        const params = new URL(req.url).searchParams;
+        const suiteVersion = params.get("suite") ?? SUITE_VERSION;
+        const commit = params.get("harnessCommit");
+        if (commit !== null && !COMMIT_RE.test(commit)) {
+          return json({ error: "harnessCommit must be a 40-character hex commit" }, 400);
+        }
+        const run = await getRun(db, req.params.id);
+        if (!run) return json({ error: "run not found" }, 404);
+        const bundle = await buildPublishBundle(db, {
+          suiteVersion,
+          runId: run.id,
+          ...(commit !== null ? { harnessCommit: commit } : {}),
+        });
+        const base = { runId: run.id, suiteVersion, status: run.status };
+        if (!bundle.ok) return json({ ...base, ok: false, refusals: bundle.refusals });
+        const { snapshot } = bundle;
+        return json({
+          ...base,
+          ok: true,
+          publishedAt: snapshot.publishedAt,
+          scenarios: snapshot.scenarios.length,
+          configs: snapshot.configs.map((c) => c.configId),
+          files: bundle.files,
+        });
       },
       "/api/runs/:id/cancel": {
         POST: async (req) => {
@@ -1024,7 +1115,7 @@ export async function startServer(
 
   const shutdown = () => {
     console.log("\nshutting down — aborting active runs and tearing down live sandboxes…");
-    for (const controller of activeRuns.values()) controller.abort();
+    for (const controller of activeRuns.values()) controller.abort(SHUTDOWN_ABORT_REASON);
     void killAllActiveStacks()
       .then(() => Bun.sleep(500))
       .finally(() => process.exit(130));

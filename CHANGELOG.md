@@ -6,6 +6,105 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.172.0] - 2026-10-14
+
+### Added
+- OpenCode harness runs OpenCode 2.0 in-process through `@opencode/sdk`, replacing the old `plugin/opencode-plugins` plugin (#2112).
+- Scripts can import `zod/mini` alongside `zod` for smaller `quickjs` bundles (#2111).
+
+### Changed
+- Worker image bumps for pi, amp, grok, copilot and kiro (#2108, #2110).
+- `heartbeat-runbook` skill seed patches (#2106).
+
+### Fixed
+- GitHub: review state is read with `GITHUB_TOKEN` when there is no App installation (#2107).
+- Slack: continuation and result links carry labels (#2118).
+
+## [1.171.1] - 2026-10-13
+
+### Changed
+- amp bumped in the worker image (#2103).
+
+### Fixed
+- Dashboard: the organization-name prompt is asked once, and `notifyUs` drops `install_id` when telemetry is off (#2104).
+
+## [1.171.0] - 2026-10-12
+
+1.170.0 was bumped on `main` but never published (no tag, npm package or GitHub release), so this release ships the 1.170.0 changes below as well.
+
+### Added
+- Dashboard: a one-tap 0-10 feedback card shown to admins at a moment of success or friction, then once a quarter (#2080).
+- Dashboard: admins can set a company website that brands the dashboard, opt in to a revocable "used by" logo listing, and turn telemetry on from a banner without a restart (#2081).
+- Dashboard: a fleet benchmark card on Home that compares the swarm with similar swarms, its API route, and the Slack Connect channel offered as a perk (#2086).
+- Dashboard: `catppuccin` (Latte light / Mocha dark) classic theme preset for the dashboard and app canvases (#2100).
+- Telemetry: pop-up impression and bell events are sent as catalogued events through the API, and the bell card drops "I already have one" (#2079).
+
+### Changed
+- agent-fs bumped to 0.16.1 (#2091); amp bumped in the worker image (#2092).
+- Docs: TLA+ specs synced with main (heartbeat, workflows) (#2093), the review skill sweeps repeated findings across the whole PR diff (#2089), and release notes for the week of 2026-10-12 (#2101).
+
+### Fixed
+- Dashboard: the org-name prompt remembers "Later" per session, shows only to admins, and appears once per page load (#2076).
+- Integrations: `LINEAR_ENABLED` and `JIRA_ENABLED` are parsed with the shared env-flag parser (#2096); so is `CONTEXT_MODE_DISABLED` (#2097).
+- pi: swarm MCP setup is retried before its tools are dropped (#2090).
+- Tests: Slack attachment URL environment is isolated per test (#2088).
+
+## [1.170.0] - 2026-10-12
+
+### Added
+- Runtime pools (beta, `RUNTIME_POOLS_ENABLED`): push-based, on-demand workers that the API starts through Docker or E2B controllers, with push or poll delivery, an `agent-swarm controller` command for remote controllers, and `runtime-pool-*` / `runtime-controller-list` MCP tools (#2045).
+- Install: a one-shot self-host installer (`curl -fsSL .../install.sh | bash`) that checks Docker, installs Bun, runs `onboard --yes` and prints the `/setup` link. `onboard --yes` no longer fails without a harness credential (#2064).
+- ACP: qwen, kiro and goose target presets (#2067).
+- Dashboard: skill usage and adoption views (#2068), and descriptions of what sub-workflow and system-one-decision nodes do (#2077).
+
+### Changed
+- Worker image: opencode 1.19.0 and amp bumps (#2055, #2061); agent-fs 0.15.4 then 0.16.0 (#2057, #2063).
+- Tests: shorter wall time for the five slowest unit-test files, and runner headroom for the scrubber's escaped-JSON scan (#2065, #2062).
+- Docs: onboarding docs aligned with main, TLA+ specs synced, and dreaming-v2 skill seed patches (#2060, #2059, #2051).
+
+### Fixed
+- Tasks: resumes and reboot retries keep the parent's model pin, including an explicit model alias that fell back next to a tier (#2052, #2053).
+- Skills: Codex shell skill reads are counted, and ambiguous shell skill reads are rejected (#2066, #2069).
+- Telemetry: harness-session and test API boots are tagged as test installs (#2070).
+- Evals: a scheduled run cut by a service redeploy resumes (#2056).
+- Dashboard: favorites are per dashboard user and the star never opens the row (#2049); the explicit-model CLI fallback model source is labelled (#2054).
+
+## [1.169.0] - 2026-10-11
+
+### Added
+- Workflows: a `sub-workflow` node runs another workflow as a child run with explicit `inputs`, waits for it to finish, and outputs its node outputs (#2030).
+- Heartbeat: `HEARTBEAT_CHECKLIST_GATE_SCRIPT` runs a global script before each recurring Lead checklist task. In `enforce` mode (`HEARTBEAT_CHECKLIST_GATE_MODE`) a quiet verdict skips the tick; the default `shadow` mode only tags the task (#2033).
+- Pages: an in-page feedback overlay lets a viewer comment on page elements and send the batch to the Lead as one task (`POST /api/pages/:id/feedback`) (#2039).
+- Slack: a durable inbound receipt store with explicit dispatch outcomes, plus `GET /api/slack/inbound/diagnostics` for operators. Socket Mode ingress is unchanged (#1606).
+- Scripts: `SCRIPT_QUICKJS_POOL_SIZE` sets the QuickJS worker pool size (default 4, 1 to 32) (#2037).
+- Evals: nightly canary and weekly matrix presets with a regression check, automatic reruns and one Slack summary per run (#1768), plus a read-only `GET /api/runs/:id/publish-bundle` endpoint for the weekly benchmark publish (#2046).
+
+### Changed
+- CI: vendored anti-slop Oxlint rules, with a first subset gated in CI (#2038).
+- Worker image: claude-code, codex, copilot, amp, acp and anthropic-sdk bumped (#2034, #2040); agent-browser bumped to 0.39.0 (#2035).
+- Docs: heartbeat spec sync, dreaming-v2 skill seed patches, and design notes on a computer primitive, team-scoped privacy and the swarm building-block ontology (#2032, #2036, #2042, #2043, #2044).
+
+### Fixed
+- Evals: the nightly canary cost cap is sized from measured cost, and a run stopped by the cap still gets its summary (#2041).
+
+## [1.168.0] - 2026-10-10
+
+### Added
+- Extensions: `slack-reply-gate` ships as a catalog template. It asks Jev (TypeSafe or OpenRouter) whether Lead should answer a Slack thread follow-up, defaults to shadow mode, and fails open (#2023).
+- Script connections: hard delete through the `delete` action on the `script-connections` MCP tool, `DELETE /api/script-connections/{id}`, and a confirm-gated button on `/connections`. It also removes the inline secret the connection minted (#2020).
+- Dashboard: the `SCRIPT_EXECUTOR` setting (`native` or `quickjs`) is selectable on the configuration page (#2004).
+
+### Changed
+- agent-fs bumped to 0.15.3.
+- Worker image: dsh, amp, claude-code, codex, copilot and grok bumped (#2007, #2022).
+- Docs: dreaming-v2 skill seed patches (#2006).
+
+### Fixed
+- Heartbeat: a Claude session waiting on a background task keeps its heartbeat live instead of going stale after 15 minutes (#2017).
+- Scheduler: a script schedule records a `script_runs` row for each fire (#2021).
+- send-task: a script can send a task to its own agent (#2019).
+- UI: the page detail view fits a phone screen (#2018).
+
 ## [1.167.0] - 2026-10-09
 
 ### Added

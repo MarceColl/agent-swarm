@@ -25,9 +25,14 @@ import {
   stopAuditGc,
   stopAuditWriter,
 } from "../be/rbac-audit";
+import { startPoolRouting, stopPoolRouting } from "../be/runtime-pools/routing";
+import { seedRuntimePools } from "../be/runtime-pools/seed";
+import { startRuntimeSupervisor, stopRuntimeSupervisor } from "../be/runtime-pools/supervisor";
 import { startScratchScriptGc, stopScratchScriptGc } from "../be/scripts/retention";
 import { loadSecretRegistry } from "../be/secret-registry";
 import { seedLegacyCapabilitiesConfig } from "../be/seed-capabilities";
+import { initApiTelemetry } from "../be/telemetry-enable";
+import { startWorkerNudgeListener } from "../be/worker-nudge-listener";
 import {
   loadEnabledExtensions,
   setExtensionLoopbackBaseUrl,
@@ -53,7 +58,7 @@ import { attachRealtimeTransport } from "../realtime/transport";
 import { startScriptRunSupervisor, stopScriptRunSupervisor } from "../script-workflows/supervisor";
 import { getServerSessionsProcessed } from "../server-runtime-counters";
 import { startSlackApp, stopSlackApp } from "../slack";
-import { initTelemetry, telemetry } from "../telemetry";
+import { telemetry } from "../telemetry";
 import { startTelemetryTicker } from "../telemetry-snapshot";
 import { API_DRAINING_HEADER } from "../utils/api-drain";
 import { getApiKey } from "../utils/api-key";
@@ -80,6 +85,7 @@ import { handleEcosystem } from "./ecosystem";
 import { handleEvents } from "./events";
 import { handleExtensions } from "./extensions";
 import { handleFavorites } from "./favorites";
+import { handleFleetBenchmark } from "./fleet-benchmark";
 import { handleFs } from "./fs";
 import { handleHeartbeat } from "./heartbeat";
 import { handleInboxState } from "./inbox-state";
@@ -113,6 +119,7 @@ import { handleRealtimeAsset, handleRealtimeTicket } from "./realtime";
 import { handleRepos } from "./repos";
 import { handleRooms } from "./rooms";
 import { describeRequestRoute } from "./route-def";
+import { handleRuntimePools } from "./runtime-pools";
 import { handleSchedules } from "./schedules";
 import { handleScriptConnectionProxy } from "./script-connection-proxy";
 import { handleScriptConnections } from "./script-connections";
@@ -121,11 +128,14 @@ import { handleScripts } from "./scripts";
 import { handleSessionData } from "./session-data";
 import { handleSessions } from "./sessions";
 import { handleSkills } from "./skills";
+import { handleSlackInbound } from "./slack-inbound";
 import { handleStats } from "./stats";
 import { handleStatus } from "./status";
 import { handleTaskTemplates } from "./task-templates";
 import { handleTasks } from "./tasks";
+import { handleTelemetryUi } from "./telemetry-ui";
 import { handleTrackers } from "./trackers";
+import { handleUsedBy } from "./used-by";
 import { handleUsers } from "./users";
 import {
   getPathSegments,
@@ -328,7 +338,7 @@ const httpServer = createHttpServer(async (req, res) => {
       if (isApiDraining()) res.setHeader(API_DRAINING_HEADER, "1");
 
       const queryParams = parseQueryParams(req.url || "");
-      const myAgentId = req.headers["x-agent-id"] as string | undefined;
+      let myAgentId = req.headers["x-agent-id"] as string | undefined;
 
       // ── Route handlers (order matters — first match wins) ──
       const handlers: (() => Promise<boolean>)[] = [
@@ -362,6 +372,7 @@ const httpServer = createHttpServer(async (req, res) => {
         () => handleRealtimeTicket(req, res, pathSegments, queryParams),
         () => handleRealtimeAsset(req, res),
         () => handleIntegrations(req, res, pathSegments, queryParams),
+        () => handleSlackInbound(req, res, pathSegments),
         () => handlePromptTemplates(req, res, pathSegments, queryParams),
         () => handleDbQuery(req, res, pathSegments, queryParams),
         () => handleMetrics(req, res, pathSegments, queryParams, myAgentId),
@@ -387,11 +398,15 @@ const httpServer = createHttpServer(async (req, res) => {
         () => handleApiKeys(req, res, pathSegments, queryParams),
         () => handleHeartbeat(req, res, pathSegments),
         () => handleEvents(req, res, pathSegments, queryParams, myAgentId),
+        () => handleRuntimePools(req, res, pathSegments, queryParams, myAgentId),
         () => handleExtensions(req, res, pathSegments, queryParams, myAgentId),
         () => handleFavorites(req, res, pathSegments, queryParams, myAgentId),
         () => handleUsers(req, res, pathSegments, queryParams),
         () => handleSessions(req, res, pathSegments, queryParams),
         () => handleInboxState(req, res, pathSegments, queryParams),
+        () => handleTelemetryUi(req, res, pathSegments, queryParams, myAgentId),
+        () => handleUsedBy(req, res, pathSegments, queryParams, myAgentId),
+        () => handleFleetBenchmark(req, res, pathSegments, queryParams),
         () => handleTaskTemplates(req, res, pathSegments, queryParams),
         () => handleMcp(req, res, transports, transportActivity, mcpSessionAgents),
         () => handleMcpUser(req, res, transportsUser, sessionUsers, transportActivityUser),
@@ -404,6 +419,7 @@ const httpServer = createHttpServer(async (req, res) => {
         // the async listener as an unhandled rejection and the client got a
         // dropped connection instead of a 500.
         if (await handleCore(req, res, myAgentId, apiKey)) return;
+        myAgentId = req.headers["x-agent-id"] as string | undefined;
 
         for (const handler of handlers) {
           if (await handler()) return;
@@ -431,6 +447,9 @@ const httpServer = createHttpServer(async (req, res) => {
 
 // Store references in globalThis for hot reload persistence
 const detachRealtime = attachRealtimeTransport(httpServer);
+const { attachControllerTransport } = await import("./controllers-connect");
+const detachControllers = attachControllerTransport(httpServer);
+const stopWorkerNudges = startWorkerNudgeListener();
 const stopRoomDeletion = realtimeBus.subscribe("room:namespace-deleted", (namespace) => {
   void Promise.resolve(removeNamespaceRooms(String(namespace))).catch((error) =>
     console.error("[rooms] Deletion failed:", scrubSecrets(String(error))),
@@ -438,6 +457,8 @@ const stopRoomDeletion = realtimeBus.subscribe("room:namespace-deleted", (namesp
 });
 globalState.__closeRealtime = () => {
   detachRealtime();
+  detachControllers();
+  stopWorkerNudges();
   stopRoomDeletion();
 };
 globalState.__httpServer = httpServer;
@@ -466,6 +487,8 @@ async function shutdown() {
 
   // Stop heartbeat triage
   stopHeartbeat();
+  stopPoolRouting();
+  await stopRuntimeSupervisor();
 
   // Stop the out-of-band queue alarm before disconnecting its Slack notifier.
   stopQueueStallAlarm();
@@ -597,11 +620,20 @@ warnIfCorsAllowsAnyOrigin();
 try {
   const loaded = await loadSecretRegistry();
   console.log(
-    `[secret-registry] registered config=${loaded.config} oauth=${loaded.oauth} scriptApi=${loaded.scriptApi} failed=${loaded.failed}`,
+    `[secret-registry] registered config=${loaded.config} oauth=${loaded.oauth} scriptApi=${loaded.scriptApi} runtimeController=${loaded.runtimeController} failed=${loaded.failed}`,
   );
 } catch (err) {
   console.error(
     "[secret-registry] load failed (non-fatal):",
+    scrubSecrets(err instanceof Error ? err.message : String(err)),
+  );
+}
+
+try {
+  await seedRuntimePools();
+} catch (err) {
+  console.error(
+    "[startup] Failed to seed runtime pools:",
     scrubSecrets(err instanceof Error ? err.message : String(err)),
   );
 }
@@ -710,9 +742,8 @@ httpServer
     const telemetrySetConfig = async (key: string, value: string) => {
       await upsertSwarmConfig({ scope: "global", key, value });
     };
-    await initTelemetry("api-server", telemetryGetConfig, telemetrySetConfig, {
-      generateIfMissing: true,
-    });
+    // Also keeps the accessors so turning telemetry on at runtime re-inits it.
+    await initApiTelemetry(telemetryGetConfig, telemetrySetConfig);
     telemetry.server("started", { port });
     // Org email domain (hourly + on user changes) and the daily org.snapshot.
     startTelemetryTicker({ getConfig: telemetryGetConfig, setConfig: telemetrySetConfig });
@@ -777,6 +808,9 @@ httpServer
       const heartbeatMs = Number(process.env.HEARTBEAT_INTERVAL_MS) || 90000;
       startHeartbeat(heartbeatMs);
     }
+
+    startPoolRouting();
+    startRuntimeSupervisor();
 
     // Start OAuth token keepalive (proactive refresh to prevent expiry)
     if (process.env.OAUTH_KEEPALIVE_DISABLE !== "true") {

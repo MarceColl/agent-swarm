@@ -1145,8 +1145,8 @@ async function deriveConnectionBinding(
     // connection references this key, so every path that supersedes or removes
     // the connection's inline-secret auth MUST delete this swarm_config row via
     // deleteManagedConnectionSecret() (the managed binding CASCADEs, this does
-    // not). upsertScriptConnection handles supersession; a future
-    // connection-delete path must handle deletion.
+    // not). upsertScriptConnection handles supersession; deleteScriptConnection
+    // handles deletion.
     configKey = `connection.${ctx.slug}.secret`;
     secretWrite = { scope: ctx.scope, scopeId: ctx.scopeId, key: configKey, value: auth.secret };
   } else if (auth.configKey) {
@@ -1316,10 +1316,8 @@ async function deleteManagedBindingForConnection(connectionId: string): Promise<
  *   1. upsertScriptConnection, when an upsert SUPERSEDES a previously-derived
  *      inline secret (slug change, or the new auth no longer uses that derived
  *      key). Handled below.
- *   2. FUTURE connection-delete path: there is no deleteScriptConnection today
- *      (only mcp_server_id CASCADE), but any such path MUST call this for the
- *      connection's derived `connection.<slug>.secret` key (when auth_type used a
- *      derived inline secret) so the secret is not orphaned.
+ *   2. deleteScriptConnection, for the connection's derived
+ *      `connection.<slug>.secret` key (when auth used a derived inline secret).
  */
 async function deleteManagedConnectionSecret(input: {
   scope: ScriptConnectionScope;
@@ -1480,7 +1478,7 @@ function parseOpenapiSpecBody(body: string): unknown {
   try {
     return JSON.parse(body);
   } catch (jsonErr) {
-    const yaml = (Bun as unknown as { YAML?: { parse(input: string): unknown } }).YAML;
+    const yaml = (Bun as { YAML?: { parse(input: string): unknown } }).YAML;
     if (!yaml) {
       throw new Error(
         `OpenAPI spec response was not valid JSON. JSON specs only unless Bun.YAML.parse is available: ${
@@ -2116,6 +2114,42 @@ export async function setScriptConnectionEnabled(
     [enabled ? 1 : 0, new Date().toISOString(), userId ?? null, id],
   );
   return row ? connectionFromRow(row) : null;
+}
+
+/**
+ * Hard-delete a script connection. Returns the deleted record, or null when no
+ * connection has that id.
+ *
+ * The auto-managed credential binding CASCADEs (and is deleted explicitly too);
+ * a derived inline secret (`connection.<slug>.secret`) is deleted here because
+ * nothing CASCADEs it. Concurrent upserts read the row's `version` and update
+ * with a `version` predicate, so they fail with ScriptConnectionConflictError
+ * once the row is gone instead of resurrecting it.
+ */
+export async function deleteScriptConnection(id: string): Promise<ScriptConnectionRecord | null> {
+  const deleted = await getDbClient().transaction(
+    async (tx): Promise<ScriptConnectionRecord | null> => {
+      await tx.run("PRAGMA defer_foreign_keys = ON");
+      const row = await tx.get<ConnectionRow>("SELECT * FROM script_connections WHERE id = ?", [
+        id,
+      ]);
+      if (!row) return null;
+      const connection = connectionFromRow(row);
+      await deleteManagedBindingForConnection(id);
+      await tx.run("DELETE FROM script_connections WHERE id = ?", [id]);
+      const secretKey = derivedInlineSecretKey(connection);
+      if (secretKey) {
+        await deleteManagedConnectionSecret({
+          scope: connection.scope,
+          scopeId: connection.scopeId,
+          key: secretKey,
+        });
+      }
+      return connection;
+    },
+  );
+  if (deleted && derivedInlineSecretKey(deleted)) refreshSecretScrubberCache();
+  return deleted;
 }
 
 export function getScriptApiConnectionDescriptors(

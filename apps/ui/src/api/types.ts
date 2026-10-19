@@ -1927,7 +1927,7 @@ export interface ExtensionPatchInput {
 }
 
 // Script connections (`ctx.api.<slug>` / `ctx.mcp.<slug>`)
-export type ScriptConnectionKind = "openapi" | "graphql" | "mcp";
+export type ScriptConnectionKind = "openapi" | "graphql" | "mcp" | "sql";
 export type ScriptConnectionScope = "global" | "agent" | "repo";
 export type OAuthBindingTokenStatus = "ok" | "expiring" | "refresh-failed" | "revoked" | "missing";
 export type CredentialAuthKind = "config" | "oauth";
@@ -2127,6 +2127,17 @@ export type UpsertScriptConnectionInput =
       scope?: ScriptConnectionScope;
       scopeId?: string | null;
       mcpServerId: string;
+      enabled?: boolean;
+    }
+  | {
+      id?: string;
+      kind: "sql";
+      slug: string;
+      displayName?: string;
+      scope?: ScriptConnectionScope;
+      scopeId?: string | null;
+      // Postgres DSN, write-only. Omit on edit to keep the stored one.
+      dsn?: { secret: string } | { configKey: string };
       enabled?: boolean;
     };
 

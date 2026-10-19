@@ -108,12 +108,24 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { readStringParam, useUrlSearchState } from "@/hooks/use-url-search-state";
+import {
+  buildSqlDsnInput,
+  initialSqlDsnDraft,
+  type SqlDsnDraft,
+  sqlDsnReady,
+} from "@/lib/sql-connection-form";
 import { cn, formatSmartTime } from "@/lib/utils";
 import { CatalogBrowser } from "@/pages/connections/components/catalog-browser";
 import { OAuthInlineConnect } from "@/pages/connections/components/oauth-inline-connect";
 import { PlaygroundPanel } from "./playground-panel";
 
-const KIND_OPTIONS: Array<ScriptConnectionKind | "all"> = ["all", "openapi", "graphql", "mcp"];
+const KIND_OPTIONS: Array<ScriptConnectionKind | "all"> = [
+  "all",
+  "openapi",
+  "graphql",
+  "mcp",
+  "sql",
+];
 const SCOPE_OPTIONS: Array<ScriptConnectionScope | "all"> = ["all", "global", "agent", "repo"];
 const TAB_VALUES = ["connections", "bindings", "oauth-apps", "playground"] as const;
 type ConnectionsTab = (typeof TAB_VALUES)[number];
@@ -219,6 +231,8 @@ function scriptUsageSnippet(
 ): string {
   const namespace = normalizeScriptSlug(slug) || "myConnection";
   if (kind === "graphql") return `await ctx.api.${namespace}.graphql("query { ... }");`;
+  if (kind === "sql")
+    return `await ctx.api.${namespace}.query("select * from users where id = $1", [1]);`;
   if (kind === "mcp") {
     const tool = detail?.tools[0]?.name || "toolName";
     return `await ctx.mcp.${namespace}.${tool}({});`;
@@ -261,6 +275,7 @@ export function KindBadge({ kind }: { kind: ScriptConnectionKind }) {
     openapi: "border-action-default/30 text-action-default",
     graphql: "border-action-script/30 text-action-script",
     mcp: "border-action-delegate-to-agent/30 text-action-delegate-to-agent",
+    sql: "border-action-raw-llm/30 text-action-raw-llm",
   };
   return (
     <Badge variant="outline" size="tag" className={colors[kind]}>
@@ -1044,6 +1059,9 @@ export function AddConnectionDialog({
   // from the in-repo vendored copy (step-2) instead of a fetched URL.
   const [vendoredSlug, setVendoredSlug] = useState("");
   const [appliedCredentialId, setAppliedCredentialId] = useState<string | null>(null);
+  // `sql` kind: the Postgres DSN, kept apart from the HTTP auth fields so a
+  // token typed for another kind is never sent as a DSN.
+  const [sqlDsn, setSqlDsn] = useState<SqlDsnDraft>(() => initialSqlDsnDraft(connection));
   const isEdit = Boolean(connection);
 
   // Reset form fields + loaded surface state. Runs on open, on close, and
@@ -1086,6 +1104,7 @@ export function AddConnectionDialog({
     );
     setAuthAuthorizationId(authSummary?.authorizationId ?? "");
     setAppliedCredentialId(null);
+    setSqlDsn(initialSqlDsnDraft(connection));
   }, [connection]);
 
   // Initialize the form only when the dialog opens or the target connection id
@@ -1358,7 +1377,7 @@ export function AddConnectionDialog({
       return;
     }
     const parsedHosts = splitList(allowedHosts);
-    const authInput = kind === "mcp" ? undefined : buildAuthInput();
+    const authInput = kind === "mcp" || kind === "sql" ? undefined : buildAuthInput();
     const common = {
       id: connection?.id,
       slug,
@@ -1375,6 +1394,15 @@ export function AddConnectionDialog({
           slug,
           displayName: optionalString(displayName),
           mcpServerId,
+        });
+      } else if (kind === "sql") {
+        const dsn = buildSqlDsnInput(sqlDsn);
+        await upsert.mutateAsync({
+          id: connection?.id,
+          kind: "sql",
+          slug,
+          displayName: optionalString(displayName),
+          ...(dsn ? { dsn } : {}),
         });
       } else if (kind === "graphql") {
         await upsert.mutateAsync({
@@ -1447,13 +1475,15 @@ export function AddConnectionDialog({
         isEdit ||
         (specMode === "url" ? openapiSpecUrl.trim() : openapiSpecJson.trim())
       ),
-    auth: !authReady,
+    dsn: kind === "sql" && !sqlDsnReady(sqlDsn, connection),
+    auth: kind !== "sql" && !authReady,
   };
   const missingFields = [
     invalid.slug && "Slug",
     invalid.mcpServer && "MCP Server",
     invalid.baseUrl && "Base URL",
     invalid.spec && (specMode === "url" ? "Spec URL" : "Inline JSON"),
+    invalid.dsn && (sqlDsn.useExistingConfigKey ? "DSN Config Key" : "DSN"),
     invalid.auth &&
       (authType === "oauth"
         ? "OAuth authorization"
@@ -1471,7 +1501,7 @@ export function AddConnectionDialog({
           <DialogDescription>
             {isEdit
               ? "Update the script namespace and generation inputs."
-              : "Register an API or MCP namespace for scripts."}
+              : "Register an API, MCP, or SQL namespace for scripts."}
           </DialogDescription>
         </DialogHeader>
 
@@ -1550,7 +1580,7 @@ export function AddConnectionDialog({
             ) : null}
             <div className="grid gap-4 md:grid-cols-3">
               <div className="space-y-2">
-                <FieldLabel tip="Select OpenAPI for generated REST methods, GraphQL for a query helper, or MCP for server tools.">
+                <FieldLabel tip="Select OpenAPI for generated REST methods, GraphQL for a query helper, MCP for server tools, or SQL for read-only Postgres queries.">
                   Kind
                 </FieldLabel>
                 <Select
@@ -1564,6 +1594,7 @@ export function AddConnectionDialog({
                     <SelectItem value="openapi">OpenAPI</SelectItem>
                     <SelectItem value="graphql">GraphQL</SelectItem>
                     <SelectItem value="mcp">MCP</SelectItem>
+                    <SelectItem value="sql">SQL</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -1607,6 +1638,55 @@ export function AddConnectionDialog({
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+            ) : kind === "sql" ? (
+              <div className="space-y-3 rounded-md border p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <FieldLabel tip="Reuse a Postgres DSN already stored under a swarm config key instead of entering it inline.">
+                    Use existing config key
+                  </FieldLabel>
+                  <Switch
+                    checked={sqlDsn.useExistingConfigKey}
+                    onCheckedChange={(checked) =>
+                      setSqlDsn((current) => ({ ...current, useExistingConfigKey: checked }))
+                    }
+                  />
+                </div>
+                {sqlDsn.useExistingConfigKey ? (
+                  <div className="space-y-2">
+                    <FieldLabel tip="Existing swarm config key holding the Postgres DSN. Pick a stored key or type a new one.">
+                      DSN Config Key
+                    </FieldLabel>
+                    <ConfigKeyCombobox
+                      value={sqlDsn.configKey}
+                      onChange={(configKey) => setSqlDsn((current) => ({ ...current, configKey }))}
+                      scope="global"
+                      invalid={markInvalid("dsn")}
+                    />
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <FieldLabel tip="postgres:// or postgresql:// URL, stored write-only under connection.<slug>.secret. Never shown again or sent to scripts.">
+                      DSN
+                    </FieldLabel>
+                    <SecretInput
+                      value={sqlDsn.secret}
+                      onChange={(secret) => setSqlDsn((current) => ({ ...current, secret }))}
+                      autoComplete="new-password"
+                      aria-label="DSN"
+                      invalid={markInvalid("dsn")}
+                      placeholder={
+                        connection?.kind === "sql"
+                          ? "Leave blank to keep current DSN"
+                          : "postgres://user:password@host:5432/database"
+                      }
+                    />
+                  </div>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  Scripts run one read-only statement per query. Use a database role with read
+                  access only.
+                </p>
               </div>
             ) : (
               <div className="space-y-4">
@@ -1687,7 +1767,7 @@ export function AddConnectionDialog({
               </div>
             )}
 
-            {kind !== "mcp" ? (
+            {kind !== "mcp" && kind !== "sql" ? (
               <div className="space-y-4 rounded-md border p-4">
                 <div className="grid gap-4 md:grid-cols-3">
                   <div className="space-y-2">
@@ -3326,6 +3406,7 @@ export default function ConnectionsPage() {
                       <SelectItem value="openapi">OpenAPI</SelectItem>
                       <SelectItem value="graphql">GraphQL</SelectItem>
                       <SelectItem value="mcp">MCP</SelectItem>
+                      <SelectItem value="sql">SQL</SelectItem>
                     </SelectContent>
                   </Select>
                   <Select

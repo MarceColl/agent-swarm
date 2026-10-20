@@ -1242,6 +1242,15 @@ export const CONFIGURATION_GROUPS: ConfigCatalogGroup[] = [
         docsUrl: `${DOCS}integrations/chat-sdk`,
       },
       {
+        key: "CHAT_SDK_THREAD_FOLLOWUP_REQUIRE_MENTION",
+        label: "Require mention in Chat SDK groups",
+        description:
+          "In group chats, ignore a message unless it mentions the bot or replies to it. Ignored messages stay visible as thread context. Direct messages always reach the swarm.",
+        kind: "boolean",
+        defaultValue: "false",
+        docsUrl: `${DOCS}integrations/chat-sdk`,
+      },
+      {
         key: "ADDITIVE_SLACK",
         label: "Additive Slack mode",
         description:

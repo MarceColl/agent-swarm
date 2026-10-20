@@ -13,6 +13,7 @@ import { resolveTemplate } from "@/prompts/resolver";
 import { chatSdkContextKey } from "@/tasks/context-key";
 import { TaskCreationBlockedError } from "@/tasks/errors";
 import type { CreateTaskOptions } from "@/types";
+import { isEnvFlagEnabled } from "@/utils/env-flag";
 import { scrubSecrets } from "@/utils/secret-scrubber";
 import { getExecutorRegistry } from "@/workflows";
 import { workflowEventBus } from "@/workflows/event-bus";
@@ -103,6 +104,12 @@ export async function handleChatInbound(
     text: message.text,
     messageId: message.id,
   });
+
+  // The SDK already stored the message in the thread history, so a dropped
+  // message is still thread context for the next addressed one.
+  const addressed =
+    kind !== "subscribed" || thread.isDM || message.isMention || message.replyTo?.author.isMe;
+  if (!addressed && isEnvFlagEnabled("CHAT_SDK_THREAD_FOLLOWUP_REQUIRE_MENTION", false)) return;
 
   let text = stripBotMention(message.text ?? "", thread.adapter);
   const immediate = /^!now\b/i.test(text);

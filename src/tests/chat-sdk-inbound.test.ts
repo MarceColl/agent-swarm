@@ -2,6 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:tes
 import { mkdtemp, rm, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { TELEGRAM_MOCK_BOT } from "../../scripts/dev/telegram-bot-api-mock";
 import {
   closeDb,
   createAgent,
@@ -359,5 +360,37 @@ describe("Chat SDK inbound pipeline", () => {
     await postTelegramUpdate(telegramUpdate(group(-2009), "just chatting"));
     await flushChatBuffers();
     expect(await chatTasks(-2009)).toHaveLength(0);
+  });
+
+  test("CHAT_SDK_THREAD_FOLLOWUP_REQUIRE_MENTION drops unaddressed group messages but keeps them as context", async () => {
+    process.env.CHAT_SDK_THREAD_FOLLOWUP_REQUIRE_MENTION = "true";
+    try {
+      await postTelegramUpdate(telegramUpdate(group(-2010), "@swarm_test_bot list the flats"));
+      await flushChatBuffers();
+      const [first] = await chatTasks(-2010);
+      await getDbClient().run("UPDATE agent_tasks SET status = 'in_progress' WHERE id = ?", [
+        first!.id,
+      ]);
+
+      // Neither a steer nor a task, though the thread is subscribed and owned.
+      await postTelegramUpdate(telegramUpdate(group(-2010), "nice flat, publish it today"));
+      await flushChatBuffers();
+      expect(await chatTasks(-2010)).toHaveLength(1);
+      expect(await steeringRows(first!.id)).toEqual([]);
+
+      await getDbClient().run("UPDATE agent_tasks SET status = 'completed' WHERE id = ?", [
+        first!.id,
+      ]);
+      const reply = { reply_to_message: telegramUpdate(group(-2010), "done").message };
+      (reply.reply_to_message as Record<string, unknown>).from = TELEGRAM_MOCK_BOT;
+      await postTelegramUpdate(telegramUpdate(group(-2010), "which one is cheapest?", reply));
+      await flushChatBuffers();
+      const tasks = await chatTasks(-2010);
+      expect(tasks).toHaveLength(2);
+      expect(tasks[1]!.task).toContain("nice flat, publish it today");
+      expect(tasks[1]!.task).toContain("which one is cheapest?");
+    } finally {
+      delete process.env.CHAT_SDK_THREAD_FOLLOWUP_REQUIRE_MENTION;
+    }
   });
 });

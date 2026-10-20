@@ -122,9 +122,10 @@ beforeEach(() => {
 });
 
 describe("chat relay text", () => {
-  test("status prefix for failed and cancelled tasks, default for an empty completion", () => {
+  test("status prefix for failed and cancelled tasks, nothing for an empty completion", () => {
     const base = { output: undefined, failureReason: undefined } as unknown as AgentTask;
-    expect(formatChatRelayText({ ...base, status: "completed" })).toBe("Task completed.");
+    expect(formatChatRelayText({ ...base, status: "completed" })).toBe("");
+    expect(formatChatRelayText({ ...base, status: "completed", output: "  " })).toBe("");
     expect(formatChatRelayText({ ...base, status: "completed", output: "done" })).toBe("done");
     expect(formatChatRelayText({ ...base, status: "failed", failureReason: "boom" })).toBe(
       "**Task failed.**\n\nboom",
@@ -165,6 +166,16 @@ describe("chat relay watcher", () => {
     // Delivered rows never post again.
     await processPendingChatRelays();
     expect(sendsTo(chatId)).toHaveLength(1);
+  });
+
+  test("a completed task with an empty output posts nothing and is marked delivered", async () => {
+    const chatId = nextChatId;
+    const task = await createChatTask(chatId);
+    await completeTask(task.id, "");
+
+    await processPendingChatRelays();
+    expect(sendsTo(chatId)).toHaveLength(0);
+    expect((await obligation(task.id))?.delivered_at).not.toBeNull();
   });
 
   test("failed and cancelled tasks post with a status line", async () => {

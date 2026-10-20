@@ -32,14 +32,17 @@ const SWEEP_EVERY_N_TICKS = 20;
 /** Coalesce bursts of terminal-task events into one early tick. */
 const EARLY_TICK_DEBOUNCE_MS = 250;
 
-/** The text posted for a terminal task. Failed and cancelled tasks get a status line first. */
+/**
+ * The text posted for a terminal task. Failed and cancelled tasks get a status
+ * line first. A completion with no output posts nothing: "" means stay silent.
+ */
 export function formatChatRelayText(task: AgentTask): string {
   const body = (task.output || task.failureReason || "").trim();
   if (task.status === "failed") return body ? `**Task failed.**\n\n${body}` : "**Task failed.**";
   if (task.status === "cancelled") {
     return body ? `**Task cancelled.**\n\n${body}` : "**Task cancelled.**";
   }
-  return body || "Task completed.";
+  return body;
 }
 
 /**
@@ -93,13 +96,16 @@ export async function processPendingChatRelays(
     if (!getChatInstance(target.adapter)) continue;
 
     if (!(await markChatRelayAttempted(task.id, now))) continue;
+    const text = formatChatRelayText(task);
     try {
-      await postChatMessage({
-        adapter: target.adapter,
-        threadId: target.threadId,
-        text: formatChatRelayText(task),
-        taskId: task.id,
-      });
+      if (text) {
+        await postChatMessage({
+          adapter: target.adapter,
+          threadId: target.threadId,
+          text,
+          taskId: task.id,
+        });
+      }
       stopTypingKeepalive(target.threadId);
       await markChatRelayDelivered(task.id, now);
       console.log(`[chat-sdk] Relayed ${task.status} task ${task.id} to ${target.adapter}`);

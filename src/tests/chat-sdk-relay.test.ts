@@ -18,6 +18,7 @@ import { ensureExtensionAgent } from "../extensions/identity";
 import { cleanExtensionTmpRoot, loadExtension } from "../extensions/loader";
 import { initExtensionPostBridge, teardownExtensionPostBridge } from "../extensions/post-bridge";
 import { splitChatMessage } from "../integrations/chat-sdk/limits";
+import { keepTelegramLineBreaks } from "../integrations/chat-sdk/outbound";
 import {
   formatChatRelayText,
   processPendingChatRelays,
@@ -139,6 +140,22 @@ describe("chat relay text", () => {
     expect(chunks.join(" ")).toBe(words);
     expect(splitChatMessage("short", 4096)).toEqual(["short"]);
   });
+
+  test("keepTelegramLineBreaks turns soft breaks into paragraph breaks", () => {
+    expect(keepTelegramLineBreaks("📋 Tus tareas:\n\n📅 Con fecha\n• Test SIBO\n• Endocrino")).toBe(
+      "📋 Tus tareas:\n\n📅 Con fecha\n\n• Test SIBO\n\n• Endocrino",
+    );
+    // Real lists, headings, quotes, tables and code keep their single line breaks.
+    const blocks = [
+      "**Tareas**\n- uno\n- dos\n1. tres",
+      "# Título\n> cita\n> sigue",
+      "| a | b |\n| --- | --- |\n| 1 | 2 |",
+      "```\nline one\nline two\n```",
+    ].join("\n\n");
+    expect(keepTelegramLineBreaks(blocks)).toBe(blocks);
+    // A plain line after a list item gets its own line too.
+    expect(keepTelegramLineBreaks("- uno\nTexto")).toBe("- uno\n\nTexto");
+  });
 });
 
 describe("chat relay watcher", () => {
@@ -165,6 +182,15 @@ describe("chat relay watcher", () => {
     // Delivered rows never post again.
     await processPendingChatRelays();
     expect(sendsTo(chatId)).toHaveLength(1);
+  });
+
+  test("a Telegram post keeps each output line on its own line", async () => {
+    const chatId = nextChatId;
+    const task = await createChatTask(chatId);
+    await completeTask(task.id, "📅 Con fecha\n• Test SIBO\n• Endocrino");
+
+    await processPendingChatRelays();
+    expect(sentText(sendsTo(chatId)[0] ?? {})).toBe("📅 Con fecha\n\n• Test SIBO\n\n• Endocrino");
   });
 
   test("failed and cancelled tasks post with a status line", async () => {

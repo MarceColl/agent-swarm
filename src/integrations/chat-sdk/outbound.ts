@@ -47,13 +47,51 @@ interface PostTarget {
   post(message: { markdown: string }): Promise<{ id: string; threadId?: string }>;
 }
 
+const FENCE = /^ {0,3}(`{3,}|~{3,})/;
+/** Lines that start their own block (list item, quote, table row, heading, fence). */
+const BLOCK_START = /^\s*([-*+] |\d+[.)] |>|\||#{1,6} |```|~~~)/;
+
+/**
+ * Telegram posts `{ markdown }` as a rich message, where a single line break
+ * inside a paragraph is a soft break and renders as a space. Chat replies are
+ * written line by line, so "Tareas\n• a\n• b" would arrive as one run-on line.
+ * Turn each soft break into a paragraph break, which Telegram shows as a new
+ * line. Code fences, list items, quotes, tables and headings keep their lines.
+ */
+export function keepTelegramLineBreaks(markdown: string): string {
+  const lines = markdown.split("\n");
+  let fence: string | undefined;
+  return lines
+    .map((line, index) => {
+      const marker = FENCE.exec(line)?.[1];
+      if (fence) {
+        if (marker && marker[0] === fence[0] && marker.length >= fence.length) fence = undefined;
+        return line;
+      }
+      if (marker) {
+        fence = marker;
+        return line;
+      }
+      const next = lines[index + 1];
+      const softBreak =
+        next !== undefined &&
+        line.trim() !== "" &&
+        next.trim() !== "" &&
+        !/^\s*[>|]/.test(line) &&
+        !BLOCK_START.test(next);
+      return softBreak ? `${line}\n` : line;
+    })
+    .join("\n");
+}
+
 async function postChunks(
   adapter: string,
   target: PostTarget,
-  text: string,
+  markdown: string,
 ): Promise<{ messageIds: string[]; threadId?: string }> {
   const messageIds: string[] = [];
   let threadId: string | undefined;
+  const text = adapter === "telegram" ? keepTelegramLineBreaks(markdown) : markdown;
   for (const chunk of splitChatMessage(text, chatMessageLimit(adapter))) {
     const sent = await target.post({ markdown: chunk });
     messageIds.push(sent.id);
